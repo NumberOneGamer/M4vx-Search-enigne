@@ -80,13 +80,13 @@ export async function recalculateRankingsForPage(pageId: number): Promise<void> 
       .onConflictDoUpdate({
         target: [rankings.pageId, rankings.keyword],
         set: {
-          relevanceScore: String(score.relevanceScore),
-          contentQualityScore: String(score.contentQualityScore),
-          freshnessScore: String(score.freshnessScore),
-          backlinkScore: String(score.backlinkScore),
-          engagementScore: String(score.engagementScore),
-          domainAuthorityScore: String(score.domainAuthorityScore),
-          overallScore: String(score.overallScore),
+          relevanceScore: score.relevanceScore,
+          contentQualityScore: score.contentQualityScore,
+          freshnessScore: score.freshnessScore,
+          backlinkScore: score.backlinkScore,
+          engagementScore: score.engagementScore,
+          domainAuthorityScore: score.domainAuthorityScore,
+          overallScore: score.overallScore,
           calculatedAt: new Date(),
         },
       });

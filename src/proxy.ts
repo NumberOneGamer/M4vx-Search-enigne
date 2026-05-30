@@ -13,7 +13,7 @@ const adminPaths = [
   '/admin',
 ];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname === '/api/analytics/click') {

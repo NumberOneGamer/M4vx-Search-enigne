@@ -218,14 +218,14 @@ export async function getSearchAnalytics(
     .groupBy(sql`DATE(created_at)`)
     .orderBy(sql`DATE(created_at)`);
 
-  const totalSearches = Number(totalSearchesResult?.count || 0);
-  const totalClicks = Number(totalClicksResult?.count || 0);
+  const totalSearches = Number(totalSearchesResult[0]?.count ?? 0);
+  const totalClicks = Number(totalClicksResult[0]?.count ?? 0);
 
   return {
     totalSearches,
     totalClicks,
     ctr: totalSearches > 0 ? Math.round((totalClicks / totalSearches) * 10000) / 100 : 0,
-    avgResponseTime: Math.round(Number(avgResponseTimeResult?.avg || 0)),
+    avgResponseTime: Math.round(Number(avgResponseTimeResult[0]?.avg ?? 0)),
     topQueries: topQueries as Array<{ term: string; count: number }>,
     searchesByDay: (searchesByDay as Array<{ date: string; count: number }>),
   };

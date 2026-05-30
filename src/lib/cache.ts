@@ -94,10 +94,7 @@ export async function cacheGetSortedSetRange(
 ): Promise<string[]> {
   try {
     const r = getRedis();
-    if (desc) {
-      return await r.zrevrange(key, start, stop);
-    }
-    return await r.zrange(key, start, stop);
+    return await r.zrange(key, start, stop, { rev: desc });
   } catch {
     return [];
   }

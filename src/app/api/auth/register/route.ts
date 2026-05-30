@@ -15,7 +15,7 @@ export async function POST(request: Request) {
 
     const { email, password, name } = parsed.data;
     const result = await registerUser(email, password, name);
-    setAuthCookie(result.token);
+    await setAuthCookie(result.token);
 
     return NextResponse.json(
       { user: result.user, token: result.token },

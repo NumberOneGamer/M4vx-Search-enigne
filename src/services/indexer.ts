@@ -48,13 +48,13 @@ async function indexPage(page: typeof pages.$inferSelect): Promise<void> {
       await db
         .update(rankings)
         .set({
-          relevanceScore: score.relevanceScore.toString(),
-          contentQualityScore: score.contentQualityScore.toString(),
-          freshnessScore: score.freshnessScore.toString(),
-          backlinkScore: score.backlinkScore.toString(),
-          engagementScore: score.engagementScore.toString(),
-          domainAuthorityScore: score.domainAuthorityScore.toString(),
-          overallScore: score.overallScore.toString(),
+          relevanceScore: score.relevanceScore,
+          contentQualityScore: score.contentQualityScore,
+          freshnessScore: score.freshnessScore,
+          backlinkScore: score.backlinkScore,
+          engagementScore: score.engagementScore,
+          domainAuthorityScore: score.domainAuthorityScore,
+          overallScore: score.overallScore,
           calculatedAt: new Date(),
         })
         .where(

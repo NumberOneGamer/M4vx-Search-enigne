@@ -15,7 +15,7 @@ export async function POST(request: Request) {
 
     const { email, password } = parsed.data;
     const result = await loginUser(email, password);
-    setAuthCookie(result.token);
+    await setAuthCookie(result.token);
 
     return NextResponse.json(
       { user: result.user, token: result.token },

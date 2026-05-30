@@ -22,8 +22,8 @@ function simpleHash(text: string): string {
   return Math.abs(hash).toString(36);
 }
 
-function extractTextFromElement($el: cheerio.Cheerio): string {
-  const $ = cheerio.load($el.html() || '', { _useHtmlParser2: true });
+function extractTextFromElement($el: cheerio.Cheerio<any>): string {
+  const $ = cheerio.load($el.html() || '');
   $.root().find('script, style, noscript, iframe, svg, nav, footer, header, aside').remove();
   return $.root().text().replace(/\s+/g, ' ').trim();
 }
@@ -55,7 +55,7 @@ export function parseHtml(html: string, baseUrl: string): ParsedPage {
     $('body').html() ||
     '';
 
-  const $content = cheerio.load(mainContent, { _useHtmlParser2: true });
+  const $content = cheerio.load(mainContent);
   $content('script, style, noscript, iframe, svg').remove();
   const content = $content.root().text().replace(/\s+/g, ' ').trim();
 

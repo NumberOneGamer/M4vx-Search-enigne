@@ -18,7 +18,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 export function generateToken(payload: TokenPayload): string {
-  return sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  return sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN as any });
 }
 
 export function verifyToken(token: string): TokenPayload | null {
@@ -29,8 +29,8 @@ export function verifyToken(token: string): TokenPayload | null {
   }
 }
 
-export function setAuthCookie(token: string): void {
-  const cookieStore = cookies();
+export async function setAuthCookie(token: string): Promise<void> {
+  const cookieStore = await cookies();
   cookieStore.set('auth_token', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -40,8 +40,8 @@ export function setAuthCookie(token: string): void {
   });
 }
 
-export function clearAuthCookie(): void {
-  const cookieStore = cookies();
+export async function clearAuthCookie(): Promise<void> {
+  const cookieStore = await cookies();
   cookieStore.set('auth_token', '', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -51,8 +51,8 @@ export function clearAuthCookie(): void {
   });
 }
 
-export function getTokenFromCookies(): string | null {
-  const cookieStore = cookies();
+export async function getTokenFromCookies(): Promise<string | null> {
+  const cookieStore = await cookies();
   const token = cookieStore.get('auth_token');
   return token?.value || null;
 }
@@ -80,7 +80,7 @@ export async function getCurrentUser(token: string): Promise<AuthUser | null> {
 }
 
 export async function authenticateUser(request: Request): Promise<AuthUser | null> {
-  const token = getTokenFromHeader(request) || getTokenFromCookies();
+  const token = getTokenFromHeader(request) || await getTokenFromCookies();
   if (!token) return null;
   return getCurrentUser(token);
 }
