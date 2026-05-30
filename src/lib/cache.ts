@@ -1,17 +1,15 @@
-import Redis from 'ioredis';
+import { Redis } from '@upstash/redis';
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL!;
+const UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN!;
 
 let redis: Redis | null = null;
 
 function getRedis(): Redis {
   if (!redis) {
-    redis = new Redis(REDIS_URL, {
-      maxRetriesPerRequest: 3,
-      retryStrategy(times) {
-        if (times > 3) return null;
-        return Math.min(times * 200, 2000);
-      },
+    redis = new Redis({
+      url: UPSTASH_REDIS_REST_URL,
+      token: UPSTASH_REDIS_REST_TOKEN,
     });
   }
   return redis;
@@ -30,7 +28,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
   try {
     const r = getRedis();
     const data = await r.get(key);
-    return data ? JSON.parse(data) : null;
+    return data as T | null;
   } catch {
     return null;
   }
@@ -83,7 +81,7 @@ export async function cacheAddToSortedSet(
 ): Promise<void> {
   try {
     const r = getRedis();
-    await r.zadd(key, score, member);
+    await r.zadd(key, { score, member });
   } catch {
   }
 }
