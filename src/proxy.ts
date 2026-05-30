@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { verifyToken } from '@/lib/auth';
+import { verifyTokenEdge } from '@/lib/auth-edge';
 
 const publicPaths = [
   '/api/auth/login',
@@ -13,7 +13,7 @@ const adminPaths = [
   '/admin',
 ];
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname === '/api/analytics/click') {
@@ -46,7 +46,7 @@ export function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL('/auth/login', request.url));
     }
 
-    const payload = verifyToken(token);
+    const payload = await verifyTokenEdge(token);
     if (!payload) {
       if (pathname.startsWith('/api/')) {
         return NextResponse.json(
