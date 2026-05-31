@@ -109,7 +109,7 @@ async function processUrl(row, env) {
         [domain_id,url,parsed.title,parsed.metaDescription,parsed.headings.join('\n'),parsed.content,parsed.wordCount,parsed.contentHash,res.status,parsed.contentType,depth], env);
     }
     await sql("UPDATE crawl_queue SET status='completed',completed_at=NOW() WHERE id=$1",[id], env);
-    if (depth < 2) {
+    if (depth < 5) {
       const allLinks = [...parsed.internalLinks, ...parsed.externalLinks];
       const exist = new Set((await sql("SELECT url FROM crawl_queue WHERE url=ANY($1)",[allLinks.slice(0,200)],env)).map(r=>r.url));
       const existPg = new Set((await sql("SELECT url FROM pages WHERE url=ANY($1)",[allLinks.slice(0,200)],env)).map(r=>r.url));
