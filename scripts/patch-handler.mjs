@@ -22,21 +22,15 @@ if (existsSync(handlerPath)) {
 }
 
 // ── Patch 2: Generate _routes.json ──
-// Exclude static assets from the Advanced Mode worker so Cloudflare CDN serves them directly.
-// The OpenNext build puts assets at the root of the output directory on CI (Linux),
-// so `/_next/static/*` maps directly to files in the output directory.
+// We do NOT exclude /_next/* or /favicon.ico here because OpenNext puts assets
+// in an `assets/` subdirectory, so the CDN can't find them at the expected path.
+// Instead, the worker (patched by pre-build.mjs) handles them via env.ASSETS.fetch()
+// with correct path mapping (/assets/ prefix).
 const routesPath = join(root, "_routes.json");
 const routes = {
   version: 1,
   include: ["/*"],
-  exclude: [
-    "/_next/static/*",
-    "/_next/image*",
-    "/favicon.ico",
-    "/favicon*",
-    "/robots.txt",
-    "/sitemap.xml",
-  ],
+  exclude: [],
 };
 writeFileSync(routesPath, JSON.stringify(routes, null, 2), "utf-8");
 console.log("✓ Created _routes.json: static assets excluded from worker");

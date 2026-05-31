@@ -19,18 +19,28 @@ if (code.includes("ASSETS.fetch")) {
   process.exit(0);
 }
 
-// Inject static asset serving before the middlewareHandler call
-// => `/cdn-cgi/image/` case stays, but `/_next/*`, `/_next/static/*`, `/favicon.ico`
-//    get served directly from env.ASSETS before reaching middleware.
+// Inject static asset serving before the middlewareHandler call.
+// The OpenNext build puts static assets in the 'assets/' subdirectory of the
+// output, so we must map /_next/* => /assets/_next/* when calling env.ASSETS.fetch().
+// A direct-path fallback is included for builds that put assets at the root level.
 const assetServing = `
-            // Serve static assets from Cloudflare Pages ASSETS binding
-            // (Required in Advanced Mode: the worker must explicitly serve static files)
             const __url = new URL(request.url);
             if (__url.pathname.startsWith("/_next/") || __url.pathname === "/favicon.ico") {
                 const __asset = env.ASSETS;
                 if (__asset) {
-                    const __assetResponse = await __asset.fetch(request);
-                    if (__assetResponse.status !== 404) return __assetResponse;
+                    try {
+                        const __origPath = __url.pathname;
+                        // OpenNext puts assets under 'assets/' — map path accordingly
+                        __url.pathname = "/assets" + __origPath;
+                        let __resp = await __asset.fetch(new Request(__url, request));
+                        if (__resp.status !== 404) return __resp;
+                        // Fallback: try direct path (for builds at root level)
+                        __url.pathname = __origPath;
+                        __resp = await __asset.fetch(new Request(__url, request));
+                        if (__resp.status !== 404) return __resp;
+                    } catch (e) {
+                        // Ignore — fall through to middleware
+                    }
                 }
             }
 `;
