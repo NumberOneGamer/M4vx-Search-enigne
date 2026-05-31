@@ -82,7 +82,7 @@ async function processUrl(row, env) {
     const domain = new URL(url).hostname;
     try {
       const rr = await fetch(`https://${domain}/robots.txt`, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(5000) });
-      if (rr.ok) { const t = await rr.text(); if (t.toLowerCase().includes('disallow: /')) { await sql("UPDATE crawl_queue SET status='failed',error_message=$1,completed_at=NOW() WHERE id=$2",['Blocked by robots.txt',id], env); return; } }
+      if (rr.ok) { const t = await rr.text(); if (/^disallow:\s*\/\s*$/im.test(t)) { await sql("UPDATE crawl_queue SET status='failed',error_message=$1,completed_at=NOW() WHERE id=$2",['Blocked by robots.txt',id], env); return; } }
     } catch {}
 
     const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' }, signal: AbortSignal.timeout(10000) });
@@ -117,34 +117,22 @@ export default {
 
     if (url.pathname === '/debug') {
       const parsed = env.DATABASE_URL.match(/postgres(?:ql)?:\/\/([^:]+):[^@]+@([^/]+)\/([^?]+)/);
-      return new Response(JSON.stringify({
-        DATABASE_URL_set: !!env.DATABASE_URL,
-        DATABASE_URL_prefix: env.DATABASE_URL ? env.DATABASE_URL.slice(0, 20) + '...' : 'NOT SET',
-        parsed_ok: !!parsed,
-        user: parsed ? parsed[1] : null,
-        host: parsed ? parsed[2] : null,
-        database: parsed ? parsed[3] : null,
-        CRAWLER_SECRET_set: !!env.CRAWLER_SECRET,
-      }), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ DATABASE_URL_set: !!env.DATABASE_URL, DATABASE_URL_prefix: env.DATABASE_URL ? env.DATABASE_URL.slice(0,20)+'...' : 'NOT SET', parsed_ok: !!parsed, user: parsed?.[1], host: parsed?.[2], database: parsed?.[3], CRAWLER_SECRET_set: !!env.CRAWLER_SECRET }), { headers: { 'Content-Type':'application/json' } });
+    }
+
+    if (url.pathname === '/reset-blocked') {
+      const r = await sql("UPDATE crawl_queue SET status='pending',attempts=0,error_message=NULL,scheduled_at=NULL,completed_at=NULL,started_at=NULL WHERE status='failed' AND error_message='Blocked by robots.txt'", [], env);
+      return new Response(JSON.stringify({ reset: r.count || 0 }), { headers: { 'Content-Type':'application/json' } });
     }
 
     try {
       const batchSize = parseInt(url.searchParams.get('batch') || '20', 10);
       try { await sql("UPDATE crawl_queue SET status='pending',started_at=NULL WHERE status='running' AND started_at < NOW()-INTERVAL '1 minute'", [], env); } catch {}
-
       const rows = await sql("SELECT * FROM crawl_queue WHERE status='pending' AND (scheduled_at IS NULL OR scheduled_at<NOW()) ORDER BY priority DESC,RANDOM() LIMIT $1",[batchSize], env);
-      if (rows.length === 0) return new Response(JSON.stringify({ processed: 0 }), { headers: { 'Content-Type':'application/json' } });
-
-      const results = [];
-      for (const r of rows) {
-        const before = await sql("SELECT status,attempts,error_message FROM crawl_queue WHERE id=$1", [r.id], env).then(x => x[0]);
-        await processUrl(r, env);
-        const after = await sql("SELECT status,attempts,error_message FROM crawl_queue WHERE id=$1", [r.id], env).then(x => x[0]);
-        results.push({ id: r.id, url: r.url, before, after });
-      }
-
-      const stats = (await sql("SELECT (SELECT COUNT(*) FROM crawl_queue WHERE status='pending') AS queue_size,(SELECT COUNT(*) FROM crawl_queue WHERE status='completed') AS completed,(SELECT COUNT(*) FROM crawl_queue WHERE status='failed') AS failed", [], env))[0];
-      return new Response(JSON.stringify({ processed: rows.length, results, stats }), { headers: { 'Content-Type':'application/json' } });
+      if (rows.length === 0) return new Response(JSON.stringify({ processed:0 }), { headers:{'Content-Type':'application/json'} });
+      for (const r of rows) await processUrl(r, env);
+      const stats = (await sql("SELECT (SELECT COUNT(*) FROM crawl_queue WHERE status='pending') AS queue_size,(SELECT COUNT(*) FROM crawl_queue WHERE status='completed') AS completed,(SELECT COUNT(*) FROM crawl_queue WHERE status='failed') AS failed",[],env))[0];
+      return new Response(JSON.stringify({ processed:rows.length, stats }), { headers:{'Content-Type':'application/json'} });
     } catch (e) {
       return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { 'Content-Type':'application/json' } });
     }
