@@ -89,7 +89,12 @@ export async function GET(request: Request) {
       query.orderBy(desc(pages.crawledAt));
     }
 
-    const results = await query.limit(pageSize).offset((page - 1) * pageSize);
+    let results = await query.limit(pageSize).offset((page - 1) * pageSize);
+
+    if (sort !== 'date') {
+      const rankOrder = new Map(rankedPages.map((rp, i) => [rp.pageId, i]));
+      results.sort((a, b) => (rankOrder.get(a.id) ?? Infinity) - (rankOrder.get(b.id) ?? Infinity));
+    }
 
     const scoreMap = new Map(rankedPages.map((rp) => [rp.pageId, rp.score]));
 
