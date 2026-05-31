@@ -17,10 +17,13 @@ for (const filePath of targets) {
     console.log("¬ No node:sqlite refs in:", filePath);
     continue;
   }
-  // Replace static require("node:sqlite") with string concatenation to prevent
-  // esbuild (Wrangler) from statically resolving it at bundle time.
-  // Runtime behavior is identical – strings concat before require.
-  content = content.replace(/require\("node:sqlite"\)/g, 'require("nod"+"e:sqlite")');
+  // 1. Remove the module registry entry for node:sqlite entirely.
+  //    This is the lazy getter form: "node:sqlite":()=>require("node:sqlite")
+  content = content.replace(/"node:sqlite":\(\)=>require\("node:sqlite"\),?/g, "");
+
+  // 2. Replace any remaining bare require("node:sqlite") with indirect
+  //    (0,require)("node:sqlite") so esbuild can't statically resolve it
+  content = content.replace(/require\("node:sqlite"\)/g, '(0,require)("node:sqlite")');
   writeFileSync(filePath, content, "utf-8");
   console.log("✓ Patched:", filePath);
 }
