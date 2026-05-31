@@ -13,9 +13,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "crawler": "tsx src/services/crawler.ts",
-    "indexer": "tsx src/services/indexer.ts",
-    "ranker": "tsx src/services/ranker.ts"
+    "crawler": "tsx --env-file=.env src/services/crawler.ts",
+    "indexer": "tsx --env-file=.env src/services/indexer.ts",
+    "ranker": "tsx --env-file=.env src/services/ranker.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.9.0",

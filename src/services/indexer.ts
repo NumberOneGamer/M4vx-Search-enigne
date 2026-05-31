@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'url';
 import { db } from '@/db';
 import { pages } from '@/db/schema/pages';
 import { rankings } from '@/db/schema/rankings';
@@ -167,6 +168,6 @@ export async function startIndexer(): Promise<void> {
   await indexLoop();
 }
 
-if (require.main === module) {
+if (process.argv[1] && (process.argv[1] === fileURLToPath(import.meta.url) || process.argv[1].endsWith('indexer.ts'))) {
   startIndexer().catch(console.error);
 }

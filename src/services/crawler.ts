@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'url';
 import { db } from '@/db';
 import { domains } from '@/db/schema/domains';
 import { pages } from '@/db/schema/pages';
@@ -359,6 +360,14 @@ export async function getCrawlStats(): Promise<{
   };
 }
 
-if (require.main === module) {
-  startCrawler().catch(console.error);
+if (process.argv[1] && (process.argv[1] === fileURLToPath(import.meta.url) || process.argv[1].endsWith('crawler.ts'))) {
+  const defaultSeeds = process.env.CRAWLER_SEED_URLS
+    ? process.env.CRAWLER_SEED_URLS.split(',')
+    : [
+        'https://developer.mozilla.org/en-US/docs/Web',
+        'https://en.wikipedia.org/wiki/Search_engine',
+        'https://nodejs.org/en/learn',
+      ];
+
+  addSeedUrls(defaultSeeds).then(() => startCrawler()).catch(console.error);
 }

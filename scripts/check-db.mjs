@@ -1,0 +1,14 @@
+import { neon } from '@neondatabase/serverless';
+const sql = neon(process.env.DATABASE_URL);
+const [pagesRow] = await sql('SELECT count(*)::int as c FROM pages');
+const [indexedRow] = await sql("SELECT count(*)::int as c FROM pages WHERE last_indexed_at IS NOT NULL");
+const [rankingsRow] = await sql('SELECT count(*)::int as c FROM rankings');
+const queue = await sql('SELECT status, count(*)::int as c FROM crawl_queue GROUP BY status');
+const failed = await sql("SELECT url, error_message FROM crawl_queue WHERE status = 'failed' LIMIT 10");
+const completed = await sql("SELECT url FROM crawl_queue WHERE status = 'completed' LIMIT 20");
+console.log('Pages:', pagesRow?.c || 0);
+console.log('Indexed:', indexedRow?.c || 0);
+console.log('Rankings:', rankingsRow?.c || 0);
+console.log('Queue:', JSON.stringify(queue, null, 2));
+console.log('Failed:', JSON.stringify(failed, null, 2));
+console.log('Completed:', JSON.stringify(completed, null, 2));

@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, integer, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, text, integer, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { domains } from './domains';
 
 export const crawlQueue = pgTable('crawl_queue', {
@@ -16,6 +16,7 @@ export const crawlQueue = pgTable('crawl_queue', {
   completedAt: timestamp('completed_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (table) => ({
+  urlIdx: uniqueIndex('queue_url_idx').on(table.url),
   statusIdx: index('queue_status_idx').on(table.status),
   domainIdx: index('queue_domain_idx').on(table.domainId),
   priorityIdx: index('queue_priority_idx').on(table.priority),
