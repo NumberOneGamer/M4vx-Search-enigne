@@ -11,6 +11,9 @@ import { cacheGet, cacheSet, CACHE_TTL } from '@/lib/cache';
 import { generateSessionId } from '@/lib/utils';
 import type { SearchResponse, SearchResult } from '@/types';
 
+const FTS_COL = sql`to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, ''))`;
+const FTS_QUERY = (q: string) => sql`plainto_tsquery('english', ${q})`;
+
 function extractSnippet(content: string, query: string, maxLen = 200): string {
   if (!content) return '';
   const terms = query.split(/\s+/).filter(Boolean);
@@ -26,6 +29,22 @@ function extractSnippet(content: string, query: string, maxLen = 200): string {
   if (start > 0) snippet = '...' + snippet;
   if (end < content.length) snippet = snippet + '...';
   return snippet;
+}
+
+function buildBaseQuery(conditions: ReturnType<typeof and>[]) {
+  return db
+    .select({
+      id: pages.id,
+      title: pages.title,
+      url: pages.url,
+      description: pages.metaDescription,
+      content: pages.content,
+      domainId: pages.domainId,
+      crawledAt: pages.crawledAt,
+      contentType: pages.contentType,
+    })
+    .from(pages)
+    .where(conditions.length > 0 ? and(...conditions) : undefined);
 }
 
 export async function GET(request: Request) {
@@ -55,9 +74,6 @@ export async function GET(request: Request) {
     const pageIds = rankedPages.map((rp) => rp.pageId);
 
     const conditions: ReturnType<typeof and>[] = [];
-    if (pageIds.length > 0) {
-      conditions.push(inArray(pages.id, pageIds));
-    }
     if (type !== 'all') {
       conditions.push(eq(pages.contentType, type));
     }
@@ -68,39 +84,33 @@ export async function GET(request: Request) {
       conditions.push(ilike(pages.url, `%${site}%`));
     }
 
-    const query = db
-      .select({
-        id: pages.id,
-        title: pages.title,
-        url: pages.url,
-        description: pages.metaDescription,
-        content: pages.content,
-        domainId: pages.domainId,
-        crawledAt: pages.crawledAt,
-        contentType: pages.contentType,
-      })
-      .from(pages);
-
-    if (conditions.length > 0) {
-      query.where(and(...conditions));
-    }
-
-    if (sort === 'date') {
-      query.orderBy(desc(pages.crawledAt));
-    }
-
-    let results = await query;
-
-    const rankOrder = new Map(rankedPages.map((rp, i) => [rp.pageId, i]));
-    results.sort((a, b) => (rankOrder.get(a.id) ?? Infinity) - (rankOrder.get(b.id) ?? Infinity));
-
-    if (sort === 'date') {
-      results.sort((a, b) => new Date(b.crawledAt || 0).getTime() - new Date(a.crawledAt || 0).getTime());
-    }
-
-    results = results.slice((page - 1) * pageSize, page * pageSize);
-
     const scoreMap = new Map(rankedPages.map((rp) => [rp.pageId, rp.score]));
+
+    let results: Awaited<ReturnType<typeof buildBaseQuery>>;
+
+    if (rankedPages.length > 0) {
+      conditions.push(inArray(pages.id, pageIds));
+      const query = buildBaseQuery(conditions);
+      if (sort === 'date') {
+        query.orderBy(desc(pages.crawledAt));
+      }
+      results = await query;
+      const rankOrder = new Map(rankedPages.map((rp, i) => [rp.pageId, i]));
+      results.sort((a, b) => (rankOrder.get(a.id) ?? Infinity) - (rankOrder.get(b.id) ?? Infinity));
+      if (sort === 'date') {
+        results.sort((a, b) => new Date(b.crawledAt || 0).getTime() - new Date(a.crawledAt || 0).getTime());
+      }
+      results = results.slice((page - 1) * pageSize, page * pageSize);
+    } else {
+      conditions.unshift(sql`${FTS_COL} @@ ${FTS_QUERY(q)}`);
+      const query = buildBaseQuery(conditions);
+      if (sort === 'date') {
+        query.orderBy(desc(pages.crawledAt));
+      } else {
+        query.orderBy(sql`ts_rank(${FTS_COL}, ${FTS_QUERY(q)}) DESC`);
+      }
+      results = await query.limit(pageSize).offset((page - 1) * pageSize);
+    }
 
     const domainIds = [...new Set(results.map((r) => r.domainId))];
     const domainRecords = domainIds.length > 0
@@ -127,9 +137,7 @@ export async function GET(request: Request) {
     const totalCountResult = await db
       .select({ count: sql<number>`count(*)` })
       .from(pages)
-      .where(
-        sql`to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, '')) @@ plainto_tsquery('english', ${q})`
-      );
+      .where(sql`${FTS_COL} @@ ${FTS_QUERY(q)}`);
     const totalResults = Number(totalCountResult[0]?.count || results.length);
 
     const suggestions = await getSuggestions(q);
