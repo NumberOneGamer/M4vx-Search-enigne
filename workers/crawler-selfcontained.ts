@@ -26,6 +26,7 @@ function simpleHash(text) {
   return Math.abs(hash).toString(36);
 }
 function matchTag(html, tag, start) {
+  if (!html) return null;
   const lo = html.toLowerCase(), os = lo.indexOf(`<${tag}`, start);
   if (os === -1) return null;
   const te = html.indexOf('>', os);
@@ -33,10 +34,10 @@ function matchTag(html, tag, start) {
   const ct = `</${tag}>`, ci = lo.indexOf(ct, te + 1);
   return ci === -1 ? null : { inner: html.slice(te + 1, ci), end: ci + ct.length };
 }
-function extractAttr(html, attr) { const m = new RegExp(`${attr}\\s*=\\s*"([^"]*)"`, 'i').exec(html); return m?.[1] ?? null; }
-function stripTags(t) { return t.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim(); }
+function extractAttr(html, attr) { if (!html) return null; const m = new RegExp(`${attr}\\s*=\\s*"([^"]*)"`, 'i').exec(html); return m?.[1] ?? null; }
+function stripTags(t) { return (t||'').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim(); }
 function removeEls(html, tags) {
-  let r = html;
+  let r = html || '';
   for (const t of tags) {
     const n = t.replace(/[.#].*$/, '').trim() || 'div';
     r = r.replace(new RegExp(`<${n}[^>]*>[\\s\\S]*?<\\/${n}>`, 'gi'), '').replace(new RegExp(`<${n}[^>]*\\/>`, 'gi'), '');
@@ -70,7 +71,8 @@ function parseHtml(html, baseUrl) {
     const h = lm[1]; if (!h||h.startsWith('#')||h.startsWith('javascript:')) continue;
     try { const abs = new URL(h,baseUrl).href.replace(/\/$/,''); const p = new URL(abs); if (p.hostname===baseHost) { if (!internalLinks.includes(abs)) internalLinks.push(abs); } else { if (!externalLinks.includes(abs)) externalLinks.push(abs); } } catch {}
   }
-  return { title, metaDescription, headings, content, wordCount: content.split(/\s+/).filter(Boolean).length, internalLinks, externalLinks, contentHash: simpleHash(content.slice(0,1e4)), contentType: /<meta[^>]+property="article:published_time"[^>]*>/i.test(cleaned) ? 'article' : 'webpage' };
+  const c = content || '';
+  return { title, metaDescription, headings, content: c, wordCount: c.split(/\s+/).filter(Boolean).length, internalLinks, externalLinks, contentHash: simpleHash(c.slice(0,1e4)), contentType: /<meta[^>]+property="article:published_time"[^>]*>/i.test(cleaned) ? 'article' : 'webpage' };
 }
 
 // ── Crawler ──
@@ -125,8 +127,9 @@ export default {
       return new Response(JSON.stringify({ errors: r }), { headers: { 'Content-Type':'application/json' } });
     }
     if (url.pathname === '/reset-blocked') {
-      const r = await sql("UPDATE crawl_queue SET status='pending',attempts=0,error_message=NULL,scheduled_at=NULL,completed_at=NULL,started_at=NULL WHERE status='failed' AND error_message ILIKE '%blocked%'", [], env);
-      return new Response(JSON.stringify({ reset: r.count || 0 }), { headers: { 'Content-Type':'application/json' } });
+      const before = Number((await sql("SELECT COUNT(*) c FROM crawl_queue WHERE status='failed' AND error_message ILIKE '%blocked%'",[],env))[0]?.c||0);
+      await sql("UPDATE crawl_queue SET status='pending',attempts=0,error_message=NULL,scheduled_at=NULL,completed_at=NULL,started_at=NULL WHERE status='failed' AND error_message ILIKE '%blocked%'", [], env);
+      return new Response(JSON.stringify({ reset: before }), { headers: { 'Content-Type':'application/json' } });
     }
 
     try {
