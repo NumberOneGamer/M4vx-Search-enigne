@@ -143,6 +143,26 @@ export default {
       } catch(e) { steps.push({ step:'parse-url', ok:false, error:String(e) }); }
       return new Response(JSON.stringify({ url: u, steps }), { headers:{'Content-Type':'application/json'} });
     }
+    if (url.pathname === '/add') {
+      const urls = (url.searchParams.get('urls')||'').split(',').filter(Boolean);
+      if (!urls.length) return new Response(JSON.stringify({error:'missing ?urls= comma-separated'}),{status:400,headers:{'Content-Type':'application/json'}});
+      let added = 0;
+      for (const u of urls) {
+        try {
+          const nu = new URL(u).href.replace(/\/$/,'');
+          const domain = nu.match(/https?:\/\/([^\/]+)/)[1];
+          let [dom] = await sql("SELECT id FROM domains WHERE name=$1",[domain],env);
+          if (!dom) { const dr = await sql("INSERT INTO domains (name) VALUES($1) RETURNING id",[domain],env); dom = dr[0]; }
+          const [exist] = await sql("SELECT id FROM crawl_queue WHERE url=$1 AND status='pending'",[nu],env);
+          const [existPage] = await sql("SELECT id FROM pages WHERE url=$1",[nu],env);
+          if (!exist && !existPage) {
+            await sql("INSERT INTO crawl_queue (domain_id,url,priority,depth,status) VALUES($1,$2,10,0,'pending')",[dom.id,nu],env);
+            added++;
+          }
+        } catch(e) { /* skip invalid */ }
+      }
+      return new Response(JSON.stringify({ added, total: urls.length }),{headers:{'Content-Type':'application/json'}});
+    }
     if (url.pathname === '/errors') {
       const r = await sql("SELECT DISTINCT error_message,COUNT(*) c FROM crawl_queue WHERE status='failed' GROUP BY error_message", [], env);
       return new Response(JSON.stringify({ errors: r }), { headers: { 'Content-Type':'application/json' } });
