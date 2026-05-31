@@ -69,7 +69,7 @@ async function addToQueue(domainId: number, url: string, depth: number, priority
     .onConflictDoNothing({ target: crawlQueue.url });
 }
 
-async function processUrl(queueItem: typeof crawlQueue.$inferSelect): Promise<void> {
+async function processUrl(queueItem: typeof crawlQueue.$inferSelect, extractLinks = true): Promise<void> {
   const { domainId, url, depth } = queueItem;
 
   await db
@@ -164,7 +164,7 @@ async function processUrl(queueItem: typeof crawlQueue.$inferSelect): Promise<vo
         });
     }
 
-    if (depth < MAX_DEPTH) {
+    if (depth < MAX_DEPTH && extractLinks) {
       const allLinks = [...parsed.internalLinks, ...parsed.externalLinks];
       const filteredLinks = allLinks.filter(
         (link) => isValidUrl(link) && shouldCrawl(link)
@@ -270,7 +270,7 @@ async function crawlLoop(): Promise<void> {
       }
 
       console.log(`[Crawler] Processing ${batch.length} URLs...`);
-      await Promise.all(batch.map(processUrl));
+      await Promise.all(batch.map((item) => processUrl(item)));
       console.log(`[Crawler] Completed batch of ${batch.length} URLs`);
 
     } catch (error) {
@@ -291,7 +291,7 @@ export async function processBatch(batchSize = CONCURRENCY): Promise<{ processed
   if (limited.length === 0) return { processed: 0, completed: 0, failed: 0 };
 
   for (const item of limited) {
-    await processUrl(item);
+    await processUrl(item, false);
   }
 
   const stats = await getCrawlStats();
