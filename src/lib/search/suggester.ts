@@ -1,7 +1,7 @@
 import { db } from '@/db';
 import { searchTerms } from '@/db/schema/searchTerms';
 import { pages } from '@/db/schema/pages';
-import { sql, ilike, desc, like } from 'drizzle-orm';
+import { eq, sql, ilike, desc } from 'drizzle-orm';
 
 export async function getSuggestions(prefix: string, limit = 8): Promise<string[]> {
   if (prefix.length < 2) return [];
@@ -69,7 +69,7 @@ export async function getRelatedSearches(query: string, limit = 5): Promise<stri
   const related = await db
     .select({ term: searchTerms.term })
     .from(searchTerms)
-    .where(sql`(${conditions.join(' OR ')}) AND LOWER(${searchTerms.term}) != ${query.toLowerCase()}`)
+    .where(sql`(${sql.join(conditions, sql` OR `)}) AND LOWER(${searchTerms.term}) != ${query.toLowerCase()}`)
     .orderBy(desc(searchTerms.frequency))
     .limit(limit);
 
@@ -98,5 +98,3 @@ export async function recordSearchTerm(term: string): Promise<void> {
       .onConflictDoNothing({ target: searchTerms.term });
   }
 }
-
-import { eq } from 'drizzle-orm';

@@ -132,7 +132,7 @@ export async function GET(request: Request) {
       page,
       userAgent: request.headers.get('user-agent') || undefined,
       ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
-    });
+    }).catch(() => {});
 
     return NextResponse.json(response);
 
@@ -143,7 +143,7 @@ export async function GET(request: Request) {
       sessionId,
       isSuccess: false,
       errorMessage: error instanceof Error ? error.message : 'Search failed',
-    });
+    }).catch(() => {});
 
     return NextResponse.json(
       { error: 'Search Error', message: 'Search failed', statusCode: 500 },

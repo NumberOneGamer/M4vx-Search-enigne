@@ -18,7 +18,6 @@ export async function searchRankedPages(
   const keywordConditions = queryTokens.map(
     (token) => sql`LOWER(${rankings.keyword}) = ${token.toLowerCase()}`
   );
-  const whereClause = keywordConditions.join(' OR ');
 
   const results = await db
     .select({
@@ -32,7 +31,7 @@ export async function searchRankedPages(
       relevanceScore: rankings.relevanceScore,
     })
     .from(rankings)
-    .where(sql`(${whereClause})`)
+    .where(sql`(${sql.join(keywordConditions, sql` OR `)})`)
     .orderBy(desc(rankings.overallScore))
     .limit(limit * 3);
 

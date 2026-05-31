@@ -18,6 +18,11 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: 'if(typeof __name==="undefined"){var __name=function(){}}'
+          }}
+        />
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
         </ThemeProvider>
