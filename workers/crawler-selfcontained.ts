@@ -135,11 +135,16 @@ export default {
       const rows = await sql("SELECT * FROM crawl_queue WHERE status='pending' AND (scheduled_at IS NULL OR scheduled_at<NOW()) ORDER BY priority DESC,RANDOM() LIMIT $1",[batchSize], env);
       if (rows.length === 0) return new Response(JSON.stringify({ processed: 0 }), { headers: { 'Content-Type':'application/json' } });
 
-      const urls = rows.map(r => ({ id: r.id, url: r.url, domain_id: r.domain_id }));
-      for (const r of rows) await processUrl(r, env);
+      const results = [];
+      for (const r of rows) {
+        const before = await sql("SELECT status,attempts,error_message FROM crawl_queue WHERE id=$1", [r.id], env).then(x => x[0]);
+        await processUrl(r, env);
+        const after = await sql("SELECT status,attempts,error_message FROM crawl_queue WHERE id=$1", [r.id], env).then(x => x[0]);
+        results.push({ id: r.id, url: r.url, before, after });
+      }
 
       const stats = (await sql("SELECT (SELECT COUNT(*) FROM crawl_queue WHERE status='pending') AS queue_size,(SELECT COUNT(*) FROM crawl_queue WHERE status='completed') AS completed,(SELECT COUNT(*) FROM crawl_queue WHERE status='failed') AS failed", [], env))[0];
-      return new Response(JSON.stringify({ processed: rows.length, sample_urls: urls.slice(0, 3), stats }), { headers: { 'Content-Type':'application/json' } });
+      return new Response(JSON.stringify({ processed: rows.length, results, stats }), { headers: { 'Content-Type':'application/json' } });
     } catch (e) {
       return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { 'Content-Type':'application/json' } });
     }
