@@ -109,6 +109,15 @@ async function processUrl(row, env) {
         [domain_id,url,parsed.title,parsed.metaDescription,parsed.headings.join('\n'),parsed.content,parsed.wordCount,parsed.contentHash,res.status,parsed.contentType,depth], env);
     }
     await sql("UPDATE crawl_queue SET status='completed',completed_at=NOW() WHERE id=$1",[id], env);
+    if (depth < 2) {
+      const existing = new Set((await sql("SELECT url FROM crawl_queue WHERE url=ANY($1)",[parsed.internalLinks.slice(0,100)],env)).map(r=>r.url));
+      const existingPages = new Set((await sql("SELECT url FROM pages WHERE url=ANY($1)",[parsed.internalLinks.slice(0,100)],env)).map(r=>r.url));
+      for (const link of parsed.internalLinks.slice(0,20)) {
+        if (!existing.has(link) && !existingPages.has(link)) {
+          await sql("INSERT INTO crawl_queue (domain_id,url,priority,depth,status) VALUES($1,$2,5,$3,'pending') ON CONFLICT (url) DO NOTHING",[domain_id,link,depth+1], env);
+        }
+      }
+    }
   } catch (e) {
     try {
       const attempts = (row.attempts||0)+1;
