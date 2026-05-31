@@ -120,8 +120,12 @@ export default {
       return new Response(JSON.stringify({ DATABASE_URL_set: !!env.DATABASE_URL, DATABASE_URL_prefix: env.DATABASE_URL ? env.DATABASE_URL.slice(0,20)+'...' : 'NOT SET', parsed_ok: !!parsed, user: parsed?.[1], host: parsed?.[2], database: parsed?.[3], CRAWLER_SECRET_set: !!env.CRAWLER_SECRET }), { headers: { 'Content-Type':'application/json' } });
     }
 
+    if (url.pathname === '/errors') {
+      const r = await sql("SELECT DISTINCT error_message,COUNT(*) c FROM crawl_queue WHERE status='failed' GROUP BY error_message", [], env);
+      return new Response(JSON.stringify({ errors: r }), { headers: { 'Content-Type':'application/json' } });
+    }
     if (url.pathname === '/reset-blocked') {
-      const r = await sql("UPDATE crawl_queue SET status='pending',attempts=0,error_message=NULL,scheduled_at=NULL,completed_at=NULL,started_at=NULL WHERE status='failed' AND error_message='Blocked by robots.txt'", [], env);
+      const r = await sql("UPDATE crawl_queue SET status='pending',attempts=0,error_message=NULL,scheduled_at=NULL,completed_at=NULL,started_at=NULL WHERE status='failed' AND error_message ILIKE '%blocked%'", [], env);
       return new Response(JSON.stringify({ reset: r.count || 0 }), { headers: { 'Content-Type':'application/json' } });
     }
 
