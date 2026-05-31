@@ -1,15 +1,26 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 
-const handlerPath = join(import.meta.dirname, "..", ".open-next", "server-functions", "default", "handler.mjs");
+const root = join(import.meta.dirname, "..", ".open-next");
+const targets = [
+  join(root, "server-functions", "default", "handler.mjs"),
+  join(root, "worker.js"),
+];
 
-if (!existsSync(handlerPath)) {
-  console.error("handler.mjs not found at", handlerPath);
-  process.exit(0); // soft exit – build might still work
+for (const filePath of targets) {
+  if (!existsSync(filePath)) {
+    console.log("¬ Skipped (not found):", filePath);
+    continue;
+  }
+  let content = readFileSync(filePath, "utf-8");
+  if (!content.includes("node:sqlite")) {
+    console.log("¬ No node:sqlite refs in:", filePath);
+    continue;
+  }
+  // Replace static require("node:sqlite") with string concatenation to prevent
+  // esbuild (Wrangler) from statically resolving it at bundle time.
+  // Runtime behavior is identical – strings concat before require.
+  content = content.replace(/require\("node:sqlite"\)/g, 'require("nod"+"e:sqlite")');
+  writeFileSync(filePath, content, "utf-8");
+  console.log("✓ Patched:", filePath);
 }
-
-let content = readFileSync(handlerPath, "utf-8");
-// Remove the node:sqlite entry from the module registry
-content = content.replace(/"node:sqlite":\(\)=>require\("node:sqlite"\),?/g, "");
-writeFileSync(handlerPath, content, "utf-8");
-console.log("✓ Patched handler.mjs: removed node:sqlite reference");
