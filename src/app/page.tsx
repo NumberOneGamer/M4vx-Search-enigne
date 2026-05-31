@@ -23,18 +23,12 @@ export default function HomePage() {
       <header className="flex justify-between items-center p-4 md:p-6">
         <div className="w-10" />
         <div className="flex items-center gap-4">
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
+          <Link
+            href="/auth/login"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors px-4 py-2 rounded-lg hover:bg-accent"
           >
-            <Link
-              href="/auth/login"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors px-4 py-2 rounded-lg hover:bg-accent"
-            >
-              Sign in
-            </Link>
-          </motion.div>
+            Sign in
+          </Link>
           <ThemeToggle />
         </div>
       </header>

@@ -72,7 +72,15 @@ function SearchContent() {
             <span className="text-gradient">M4vx</span>{' '}
             <span className="text-muted-foreground">Search</span>
           </Link>
-          <ThemeToggle />
+          <div className="flex items-center gap-4">
+            <Link
+              href="/auth/login"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-accent"
+            >
+              Sign in
+            </Link>
+            <ThemeToggle />
+          </div>
         </header>
         <main className="flex-1 flex flex-col items-center justify-center px-4">
           <motion.div

@@ -91,8 +91,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <motion.aside
         initial={false}
         animate={{ x: sidebarOpen ? 0 : -280 }}
-        className={`fixed top-0 left-0 z-50 h-full w-64 bg-card border-r border-border shadow-elevated lg:translate-x-0 lg:shadow-none`}
-        style={{ transform: 'none' }}
+        className={`fixed top-0 left-0 z-50 h-full w-64 bg-card border-r border-border shadow-elevated lg:shadow-none lg:!translate-x-0`}
       >
         <div className={`flex h-full flex-col ${sidebarOpen ? '' : 'hidden lg:flex'}`}>
           <div className="flex items-center justify-between p-4 border-b border-border">
