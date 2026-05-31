@@ -150,11 +150,11 @@ function SearchContent() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 glass border-b border-border">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-center gap-3">
           <Link href="/" className="text-lg font-bold shrink-0 tracking-tight">
             <span className="text-gradient">M4vx</span>
           </Link>
-          <div className="flex-1 max-w-xl">
+          <div className="flex-1 max-w-lg">
             <SearchBar
               query={searchInput}
               onChange={setSearchInput}
