@@ -1,11 +1,17 @@
 // ── SQL helper (Neon HTTP API, no packages needed) ──
-async function sql(query, params = []) {
-  const dbUrl = new URL(process.env.DATABASE_URL);
-  const endpoint = `https://${dbUrl.hostname}/sql`;
-  const token = btoa(`${dbUrl.username}:${dbUrl.password}`);
+async function sql(query, params, env) {
+  const m = env.DATABASE_URL.match(/postgres(?:ql)?:\/\/([^:]+):([^@]+)@([^/]+)\/([^?]+)/);
+  if (!m) throw new Error('Cannot parse DATABASE_URL');
+  const [, , , host] = m;
+  const endpoint = `https://${host}/sql`;
   const res = await fetch(endpoint, {
     method: 'POST',
-    headers: { Authorization: `Basic ${token}`, 'Content-Type': 'application/json' },
+    headers: {
+      'Neon-Connection-String': env.DATABASE_URL,
+      'Neon-Raw-Text-Output': 'true',
+      'Neon-Array-Mode': 'true',
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({ query, params }),
   });
   if (!res.ok) throw new Error(`DB error: ${await res.text()}`);
@@ -70,55 +76,68 @@ function parseHtml(html, baseUrl) {
 // ── Crawler ──
 const UA = 'SearchEngineBot/1.0';
 
-async function processUrl(row) {
+async function processUrl(row, env) {
   const { id, domain_id, url, depth } = row;
   try {
     const domain = new URL(url).hostname;
     try {
       const rr = await fetch(`https://${domain}/robots.txt`, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(5000) });
-      if (rr.ok) { const t = await rr.text(); if (t.toLowerCase().includes('disallow: /')) { await sql("UPDATE crawl_queue SET status='failed',error_message=$1,completed_at=NOW() WHERE id=$2",['Blocked by robots.txt',id]); return; } }
+      if (rr.ok) { const t = await rr.text(); if (t.toLowerCase().includes('disallow: /')) { await sql("UPDATE crawl_queue SET status='failed',error_message=$1,completed_at=NOW() WHERE id=$2",['Blocked by robots.txt',id], env); return; } }
     } catch {}
 
     const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' }, signal: AbortSignal.timeout(10000) });
     const html = await res.text();
     const parsed = parseHtml(html, url);
 
-    const existing = await sql('SELECT id FROM pages WHERE url=$1', [url]).then(r => r[0] || null);
+    const existing = await sql('SELECT id FROM pages WHERE url=$1', [url], env).then(r => r[0] || null);
     if (existing) {
       await sql('UPDATE pages SET title=$1,meta_description=$2,headings=$3,content=$4,word_count=$5,content_hash=$6,http_status=$7,crawled_at=NOW(),updated_at=NOW() WHERE id=$8',
-        [parsed.title,parsed.metaDescription,parsed.headings.join('\n'),parsed.content,parsed.wordCount,parsed.contentHash,res.status,existing.id]);
+        [parsed.title,parsed.metaDescription,parsed.headings.join('\n'),parsed.content,parsed.wordCount,parsed.contentHash,res.status,existing.id], env);
     } else {
       await sql('INSERT INTO pages (domain_id,url,title,meta_description,headings,content,word_count,content_hash,http_status,content_type,crawl_depth,crawled_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())',
-        [domain_id,url,parsed.title,parsed.metaDescription,parsed.headings.join('\n'),parsed.content,parsed.wordCount,parsed.contentHash,res.status,parsed.contentType,depth]);
+        [domain_id,url,parsed.title,parsed.metaDescription,parsed.headings.join('\n'),parsed.content,parsed.wordCount,parsed.contentHash,res.status,parsed.contentType,depth], env);
     }
-    await sql("UPDATE crawl_queue SET status='completed',completed_at=NOW() WHERE id=$1",[id]);
+    await sql("UPDATE crawl_queue SET status='completed',completed_at=NOW() WHERE id=$1",[id], env);
   } catch (e) {
     try {
       const attempts = (row.attempts||0)+1;
       if (attempts >= 3) {
-        await sql("UPDATE crawl_queue SET status='failed',error_message=$1,attempts=$2,completed_at=NOW() WHERE id=$3",[String(e),attempts,id]);
+        await sql("UPDATE crawl_queue SET status='failed',error_message=$1,attempts=$2,completed_at=NOW() WHERE id=$3",[String(e),attempts,id], env);
       } else {
-        await sql("UPDATE crawl_queue SET status='pending',error_message=$1,attempts=$2,scheduled_at=NOW()+($3||' minutes')::interval WHERE id=$4",[String(e),attempts,String(Math.pow(2,attempts)),id]);
+        await sql("UPDATE crawl_queue SET status='pending',error_message=$1,attempts=$2,scheduled_at=NOW()+($2||' minutes')::interval WHERE id=$3",[String(e),attempts,id], env);
       }
     } catch {}
   }
 }
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.searchParams.get('key') !== process.env.CRAWLER_SECRET) return new Response('Unauthorized', { status: 401 });
+    if (url.searchParams.get('key') !== env.CRAWLER_SECRET) return new Response('Unauthorized', { status: 401 });
+
+    if (url.pathname === '/debug') {
+      const parsed = env.DATABASE_URL.match(/postgres(?:ql)?:\/\/([^:]+):[^@]+@([^/]+)\/([^?]+)/);
+      return new Response(JSON.stringify({
+        DATABASE_URL_set: !!env.DATABASE_URL,
+        DATABASE_URL_prefix: env.DATABASE_URL ? env.DATABASE_URL.slice(0, 20) + '...' : 'NOT SET',
+        parsed_ok: !!parsed,
+        user: parsed ? parsed[1] : null,
+        host: parsed ? parsed[2] : null,
+        database: parsed ? parsed[3] : null,
+        CRAWLER_SECRET_set: !!env.CRAWLER_SECRET,
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
 
     try {
       const batchSize = parseInt(url.searchParams.get('batch') || '20', 10);
-      try { await sql("UPDATE crawl_queue SET status='pending',started_at=NULL WHERE status='running' AND started_at < NOW()-INTERVAL '1 minute'"); } catch {}
+      try { await sql("UPDATE crawl_queue SET status='pending',started_at=NULL WHERE status='running' AND started_at < NOW()-INTERVAL '1 minute'", [], env); } catch {}
 
-      const rows = await sql("SELECT * FROM crawl_queue WHERE status='pending' AND (scheduled_at IS NULL OR scheduled_at<NOW()) ORDER BY priority DESC,RANDOM() LIMIT $1",[batchSize]);
+      const rows = await sql("SELECT * FROM crawl_queue WHERE status='pending' AND (scheduled_at IS NULL OR scheduled_at<NOW()) ORDER BY priority DESC,RANDOM() LIMIT $1",[batchSize], env);
       if (rows.length === 0) return new Response(JSON.stringify({ processed: 0 }), { headers: { 'Content-Type':'application/json' } });
 
-      for (const r of rows) await processUrl(r);
+      for (const r of rows) await processUrl(r, env);
 
-      const stats = (await sql("SELECT (SELECT COUNT(*) FROM crawl_queue WHERE status='pending') AS queue_size,(SELECT COUNT(*) FROM crawl_queue WHERE status='completed') AS completed,(SELECT COUNT(*) FROM crawl_queue WHERE status='failed') AS failed"))[0];
+      const stats = (await sql("SELECT (SELECT COUNT(*) FROM crawl_queue WHERE status='pending') AS queue_size,(SELECT COUNT(*) FROM crawl_queue WHERE status='completed') AS completed,(SELECT COUNT(*) FROM crawl_queue WHERE status='failed') AS failed", [], env))[0];
       return new Response(JSON.stringify({ processed: rows.length, stats }), { headers: { 'Content-Type':'application/json' } });
     } catch (e) {
       return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { 'Content-Type':'application/json' } });
