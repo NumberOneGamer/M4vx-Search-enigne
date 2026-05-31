@@ -20,7 +20,7 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      <header className="flex justify-between items-center p-4 md:p-6">
+      <header className="flex justify-between items-center p-4 md:p-6 relative z-10">
         <div className="w-10" />
         <div className="flex items-center gap-4">
           <Link
