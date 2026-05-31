@@ -2,28 +2,48 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 
 const root = join(import.meta.dirname, "..", ".open-next");
-const targets = [
-  join(root, "server-functions", "default", "handler.mjs"),
-  join(root, "worker.js"),
-];
 
-for (const filePath of targets) {
-  if (!existsSync(filePath)) {
-    console.log("¬ Skipped (not found):", filePath);
-    continue;
+// ── Patch 1: Remove node:sqlite from handler.mjs ──
+const handlerPath = join(root, "server-functions", "default", "handler.mjs");
+if (existsSync(handlerPath)) {
+  let content = readFileSync(handlerPath, "utf-8");
+  if (content.includes("node:sqlite")) {
+    content = content.replace(/"node:sqlite":\(\)=>require\("node:sqlite"\),?/g, "");
+    content = content.replace(/require\("node:sqlite"\)/g, '(0,require)("node:sqlite")');
+    writeFileSync(handlerPath, content, "utf-8");
+    console.log("✓ Patched handler.mjs: removed node:sqlite");
+  } else {
+    console.log("¬ No node:sqlite refs in handler.mjs");
   }
-  let content = readFileSync(filePath, "utf-8");
-  if (!content.includes("node:sqlite")) {
-    console.log("¬ No node:sqlite refs in:", filePath);
-    continue;
-  }
-  // 1. Remove the module registry entry for node:sqlite entirely.
-  //    This is the lazy getter form: "node:sqlite":()=>require("node:sqlite")
-  content = content.replace(/"node:sqlite":\(\)=>require\("node:sqlite"\),?/g, "");
-
-  // 2. Replace any remaining bare require("node:sqlite") with indirect
-  //    (0,require)("node:sqlite") so esbuild can't statically resolve it
-  content = content.replace(/require\("node:sqlite"\)/g, '(0,require)("node:sqlite")');
-  writeFileSync(filePath, content, "utf-8");
-  console.log("✓ Patched:", filePath);
+} else {
+  console.log("¬ handler.mjs not found");
 }
+
+// ── Patch 2: Serve static assets via env.ASSETS in worker.js ──
+const workerPath = join(root, "worker.js");
+if (existsSync(workerPath)) {
+  let content = readFileSync(workerPath, "utf-8");
+  // Inject static asset serving before the middleware handler call.
+  // Pattern: `const reqOrResp = await middlewareHandler(request, env, ctx);`
+  const assetServingCode = `
+  // Serve static assets from Cloudflare Pages ASSETS binding
+  const __url = new URL(request.url);
+  if (__url.pathname.startsWith('/_next/') || __url.pathname === '/favicon.ico') {
+    const __asset = env.ASSETS;
+    if (__asset) {
+      const __assetResponse = await __asset.fetch(request);
+      if (__assetResponse.status !== 404) return __assetResponse;
+    }
+  }
+`;
+  content = content.replace(
+    /const reqOrResp = await middlewareHandler\(request, env, ctx\);/,
+    assetServingCode + "\n  const reqOrResp = await middlewareHandler(request, env, ctx);"
+  );
+  writeFileSync(workerPath, content, "utf-8");
+  console.log("✓ Patched worker.js: added env.ASSETS static asset serving");
+} else {
+  console.log("¬ worker.js not found");
+}
+
+console.log("✔ All patches complete");
