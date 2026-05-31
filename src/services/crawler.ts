@@ -243,7 +243,7 @@ async function processUrl(queueItem: typeof crawlQueue.$inferSelect): Promise<vo
   }
 }
 
-async function getNextBatch(): Promise<typeof crawlQueue.$inferSelect[]> {
+async function getNextBatch(limit = CONCURRENCY): Promise<typeof crawlQueue.$inferSelect[]> {
   return db
     .select()
     .from(crawlQueue)
@@ -254,7 +254,7 @@ async function getNextBatch(): Promise<typeof crawlQueue.$inferSelect[]> {
       )
     )
     .orderBy(desc(crawlQueue.priority), sql`RANDOM()`)
-    .limit(CONCURRENCY);
+    .limit(limit);
 }
 
 async function crawlLoop(): Promise<void> {
@@ -286,7 +286,7 @@ export async function startCrawler(): Promise<void> {
 }
 
 export async function processBatch(batchSize = CONCURRENCY): Promise<{ processed: number; completed: number; failed: number }> {
-  const batch = await getNextBatch();
+  const batch = await getNextBatch(batchSize);
   const limited = batch.slice(0, batchSize);
   if (limited.length === 0) return { processed: 0, completed: 0, failed: 0 };
 
