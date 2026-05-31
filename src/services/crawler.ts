@@ -73,15 +73,6 @@ async function processUrl(queueItem: typeof crawlQueue.$inferSelect, extractLink
   const { domainId, url, depth } = queueItem;
 
   try {
-    await db
-      .update(crawlQueue)
-      .set({ status: 'running', startedAt: new Date() })
-      .where(eq(crawlQueue.id, queueItem.id));
-  } catch {
-    // Non-fatal if status update fails
-  }
-
-  try {
     const domain = new URL(url).hostname;
 
     const { allowed, delay } = await checkRobotsTxt(domain, url, USER_AGENT);
@@ -306,6 +297,19 @@ const SAFE_BATCH_MAX = 5;
 
 export async function processBatch(batchSize = CONCURRENCY): Promise<{ processed: number; completed: number; failed: number }> {
   const size = Math.min(batchSize, SAFE_BATCH_MAX);
+
+  try {
+    await db
+      .update(crawlQueue)
+      .set({ status: 'pending', startedAt: null })
+      .where(
+        and(
+          eq(crawlQueue.status, 'running'),
+          lt(crawlQueue.startedAt, new Date(Date.now() - 60 * 1000))
+        )
+      );
+  } catch {}
+
   const batch = await getNextBatch(size);
   const limited = batch.slice(0, size);
   if (limited.length === 0) return { processed: 0, completed: 0, failed: 0 };
