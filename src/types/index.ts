@@ -20,6 +20,9 @@ export interface SearchResult {
   position: number;
   score: number;
   contentType?: string;
+  favicon?: string;
+  wordCount?: number;
+  language?: string;
 }
 
 export interface SearchResponse {
@@ -33,6 +36,19 @@ export interface SearchResponse {
   relatedSearches: string[];
   suggestions: string[];
   responseTimeMs: number;
+  appliedFilters?: AppliedFilters;
+  aiSummary?: string | null;
+  relatedQuestions?: string[];
+}
+
+export interface AppliedFilters {
+  site?: string;
+  fileType?: string;
+  excludeTerms?: string[];
+  dateAfter?: string;
+  dateBefore?: string;
+  datePreset?: string;
+  exactPhrases?: string[];
 }
 
 export interface SuggestionResponse {

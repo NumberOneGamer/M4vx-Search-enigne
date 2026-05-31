@@ -2,24 +2,26 @@ import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { pages } from '@/db/schema/pages';
 import { domains } from '@/db/schema/domains';
-import { eq, sql, desc, ilike, and, inArray } from 'drizzle-orm';
+import { eq, sql, desc, ilike, and, or, inArray, not, lt, gt } from 'drizzle-orm';
 import { searchSchema } from '@/lib/validation';
 import { searchRankedPages, getRankingFactors } from '@/services/ranker';
 import { logSearch } from '@/services/analytics';
 import { getSuggestions, getRelatedSearches, recordSearchTerm } from '@/lib/search/suggester';
 import { cacheGet, cacheSet, CACHE_TTL } from '@/lib/cache';
 import { generateSessionId } from '@/lib/utils';
+import { parseQuery, buildDateCondition } from '@/lib/search/query-parser';
 import type { SearchResponse, SearchResult } from '@/types';
 
 const FTS_COL = sql`to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, ''))`;
 const FTS_QUERY = (q: string) => sql`plainto_tsquery('english', ${q})`;
+const PHRASE_QUERY = (q: string) => sql`phraseto_tsquery('english', ${q})`;
 
-function extractSnippet(content: string, query: string, maxLen = 200): string {
+function extractSnippet(content: string, query: string, exactPhrases: string[] = [], maxLen = 200): string {
   if (!content) return '';
-  const terms = query.split(/\s+/).filter(Boolean);
-  if (!terms.length) return content.slice(0, maxLen);
+  const allTerms = [...query.split(/\s+/).filter(Boolean), ...exactPhrases];
+  if (!allTerms.length) return content.slice(0, maxLen);
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = terms.map(t => `(${esc(t)})`).join('|');
+  const pattern = allTerms.map(t => `(${esc(t)})`).join('|');
   const re = new RegExp(pattern, 'gi');
   const match = re.exec(content);
   if (!match) return content.slice(0, maxLen);
@@ -31,7 +33,7 @@ function extractSnippet(content: string, query: string, maxLen = 200): string {
   return snippet;
 }
 
-function buildBaseQuery(conditions: ReturnType<typeof and>[]) {
+function buildBaseQuery(selectExtra: Record<string, any> = {}) {
   return db
     .select({
       id: pages.id,
@@ -42,9 +44,10 @@ function buildBaseQuery(conditions: ReturnType<typeof and>[]) {
       domainId: pages.domainId,
       crawledAt: pages.crawledAt,
       contentType: pages.contentType,
+      wordCount: pages.wordCount,
+      ...selectExtra,
     })
-    .from(pages)
-    .where(conditions.length > 0 ? and(...conditions) : undefined);
+    .from(pages);
 }
 
 export async function GET(request: Request) {
@@ -59,9 +62,21 @@ export async function GET(request: Request) {
     );
   }
 
-  const { q, page, pageSize, type, language, fileType, site, sort } = parsed.data;
+  let { q, page, pageSize, type, language, fileType, site, sort, excludeTerms: rawExclude, dateAfter: rawDateAfter, dateBefore: rawDateBefore, datePreset: rawDatePreset, exactPhrases: rawPhrases } = parsed.data;
 
-  const cacheKey = `search:${q}:${page}:${pageSize}:${type}:${sort}`;
+  const parsedQuery = parseQuery(q);
+
+  const effectiveSite = parsedQuery.siteFilter || site;
+  const effectiveFileType = parsedQuery.fileTypeFilter || fileType;
+  const effectiveExclude = [...new Set([...parsedQuery.excludeTerms, ...(rawExclude ? rawExclude.split(',') : [])])];
+  const effectiveExactPhrases = [...new Set([...parsedQuery.exactPhrases, ...(rawPhrases ? rawPhrases.split('|') : [])])];
+  const effectiveQ = parsedQuery.cleanQuery || q;
+
+  const dateCond = buildDateCondition(rawDatePreset || parsedQuery.datePreset);
+  const effectiveDateAfter = rawDateAfter || parsedQuery.dateAfter || dateCond.after;
+  const effectiveDateBefore = rawDateBefore || parsedQuery.dateBefore || dateCond.before;
+
+  const cacheKey = `search:${effectiveQ}:${page}:${pageSize}:${type}:${sort}:${effectiveSite || ''}:${effectiveFileType || ''}:${effectiveDateAfter || ''}:${effectiveDateBefore || ''}`;
   const cached = await cacheGet<SearchResponse>(cacheKey);
   if (cached) {
     return NextResponse.json(cached);
@@ -69,28 +84,41 @@ export async function GET(request: Request) {
 
   try {
     const factors = await getRankingFactors();
-    const rankedPages = await searchRankedPages(q, factors, pageSize * 3);
+    const rankedPages = await searchRankedPages(effectiveQ, factors, pageSize * 3);
 
     const pageIds = rankedPages.map((rp) => rp.pageId);
 
     const conditions: ReturnType<typeof and>[] = [];
+
     if (type !== 'all') {
       conditions.push(eq(pages.contentType, type));
     }
-    if (fileType) {
-      conditions.push(ilike(pages.url, `%.${fileType}`));
+    if (effectiveSite) {
+      conditions.push(ilike(pages.url, `%${effectiveSite}%`));
     }
-    if (site) {
-      conditions.push(ilike(pages.url, `%${site}%`));
+    if (effectiveFileType) {
+      conditions.push(ilike(pages.url, `%.${effectiveFileType}`));
+    }
+    if (effectiveDateAfter) {
+      conditions.push(gt(pages.crawledAt, new Date(effectiveDateAfter)));
+    }
+    if (effectiveDateBefore) {
+      const endDate = new Date(effectiveDateBefore);
+      endDate.setDate(endDate.getDate() + 1);
+      conditions.push(lt(pages.crawledAt, endDate));
     }
 
     const scoreMap = new Map(rankedPages.map((rp) => [rp.pageId, rp.score]));
 
     let results: Awaited<ReturnType<typeof buildBaseQuery>>;
+    const allKeywords = [...effectiveQ.split(/\s+/).filter(Boolean), ...effectiveExactPhrases];
 
     if (rankedPages.length > 0) {
       conditions.push(inArray(pages.id, pageIds));
-      const query = buildBaseQuery(conditions);
+      const query = buildBaseQuery();
+      if (conditions.length > 0) {
+        query.where(and(...conditions));
+      }
       if (sort === 'date') {
         query.orderBy(desc(pages.crawledAt));
       }
@@ -102,14 +130,33 @@ export async function GET(request: Request) {
       }
       results = results.slice((page - 1) * pageSize, page * pageSize);
     } else {
-      conditions.unshift(sql`${FTS_COL} @@ ${FTS_QUERY(q)}`);
-      const query = buildBaseQuery(conditions);
+      if (effectiveExactPhrases.length > 0) {
+        const phraseConditions = effectiveExactPhrases.map(phrase =>
+          sql`to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, '')) @@ ${PHRASE_QUERY(phrase)}`
+        );
+        conditions.push(or(...phraseConditions));
+      }
+      conditions.unshift(sql`${FTS_COL} @@ ${FTS_QUERY(effectiveQ)}`);
+      const query = buildBaseQuery();
+      if (conditions.length > 0) {
+        query.where(and(...conditions));
+      }
       if (sort === 'date') {
         query.orderBy(desc(pages.crawledAt));
       } else {
-        query.orderBy(sql`ts_rank(${FTS_COL}, ${FTS_QUERY(q)}) DESC`);
+        query.orderBy(sql`ts_rank(${FTS_COL}, ${FTS_QUERY(effectiveQ)}) DESC`);
       }
       results = await query.limit(pageSize).offset((page - 1) * pageSize);
+    }
+
+    if (effectiveExclude.length > 0) {
+      results = results.filter(r => {
+        const lowerContent = (r.content || '').toLowerCase();
+        const lowerTitle = (r.title || '').toLowerCase();
+        return !effectiveExclude.some(term =>
+          lowerContent.includes(term) || lowerTitle.includes(term)
+        );
+      });
     }
 
     const domainIds = [...new Set(results.map((r) => r.domainId))];
@@ -125,23 +172,27 @@ export async function GET(request: Request) {
       id: r.id,
       title: r.title || 'Untitled',
       url: r.url,
-      description: extractSnippet(r.content || '', q) || r.description || '',
-      highlightedKeywords: q.split(/\s+/),
+      description: extractSnippet(r.content || '', effectiveQ, effectiveExactPhrases) || r.description || '',
+      highlightedKeywords: allKeywords,
       domain: domainMap.get(r.domainId) || '',
       lastCrawledAt: r.crawledAt?.toISOString() || null,
       position: (page - 1) * pageSize + i + 1,
       score: scoreMap.get(r.id) || 0,
       contentType: r.contentType || undefined,
+      wordCount: r.wordCount || undefined,
+      favicon: domainMap.get(r.domainId)
+        ? `https://www.google.com/s2/favicons?domain=${domainMap.get(r.domainId)}&sz=32`
+        : undefined,
     }));
 
     const totalCountResult = await db
       .select({ count: sql<number>`count(*)` })
       .from(pages)
-      .where(sql`${FTS_COL} @@ ${FTS_QUERY(q)}`);
+      .where(sql`${FTS_COL} @@ ${FTS_QUERY(effectiveQ)}`);
     const totalResults = Number(totalCountResult[0]?.count || results.length);
 
-    const suggestions = await getSuggestions(q);
-    const relatedSearches = await getRelatedSearches(q);
+    const suggestions = await getSuggestions(effectiveQ);
+    const relatedSearches = await getRelatedSearches(effectiveQ);
 
     const responseTimeMs = Date.now() - startTime;
 
@@ -151,17 +202,28 @@ export async function GET(request: Request) {
       page,
       pageSize,
       totalPages: Math.ceil(totalResults / pageSize),
-      query: q,
+      query: effectiveQ,
       relatedSearches,
       suggestions,
       responseTimeMs,
+      appliedFilters: effectiveSite || effectiveFileType || effectiveExclude.length > 0 || effectiveDateAfter || effectiveDateBefore || effectiveExactPhrases.length > 0
+        ? {
+            site: effectiveSite || undefined,
+            fileType: effectiveFileType || undefined,
+            excludeTerms: effectiveExclude.length > 0 ? effectiveExclude : undefined,
+            dateAfter: effectiveDateAfter || undefined,
+            dateBefore: effectiveDateBefore || undefined,
+            datePreset: rawDatePreset || parsedQuery.datePreset || undefined,
+            exactPhrases: effectiveExactPhrases.length > 0 ? effectiveExactPhrases : undefined,
+          }
+        : undefined,
     };
 
     await cacheSet(cacheKey, response, CACHE_TTL.SEARCH_RESULTS);
-    await recordSearchTerm(q);
+    await recordSearchTerm(effectiveQ);
 
     const sessionId = searchParams.get('sessionId') || generateSessionId();
-    logSearch(q, results.length, responseTimeMs, {
+    logSearch(effectiveQ, results.length, responseTimeMs, {
       sessionId,
       page,
       userAgent: request.headers.get('user-agent') || undefined,
@@ -173,7 +235,7 @@ export async function GET(request: Request) {
   } catch (error) {
     const responseTimeMs = Date.now() - startTime;
     const sessionId = searchParams.get('sessionId') || generateSessionId();
-    logSearch(q, 0, responseTimeMs, {
+    logSearch(effectiveQ, 0, responseTimeMs, {
       sessionId,
       isSuccess: false,
       errorMessage: error instanceof Error ? error.message : 'Search failed',

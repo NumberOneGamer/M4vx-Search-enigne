@@ -23,6 +23,11 @@ export const searchSchema = z.object({
   fileType: z.string().max(50).optional(),
   site: z.string().max(500).optional(),
   sort: z.enum(['relevance', 'date']).default('relevance'),
+  excludeTerms: z.string().optional(),
+  dateAfter: z.string().optional(),
+  dateBefore: z.string().optional(),
+  datePreset: z.enum(['today', 'week', 'month']).optional(),
+  exactPhrases: z.string().optional(),
 });
 
 export const suggestionSchema = z.object({

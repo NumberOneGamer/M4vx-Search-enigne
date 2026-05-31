@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, FormEvent, useEffect, Suspense } from 'react';
+import { useState, FormEvent, useEffect, Suspense, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { SearchBar } from '@/components/search/search-bar';
 import { SearchResults } from '@/components/search/search-results';
 import { Pagination } from '@/components/search/pagination';
-import type { SearchResponse } from '@/types';
-import { Loader2, TrendingUp, Search } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import type { SearchResponse, SearchResult } from '@/types';
+import { Loader2, TrendingUp, Search, Filter, X, MessageSquare, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 
 function SearchContent() {
@@ -64,6 +65,21 @@ function SearchContent() {
     }
   };
 
+  const handleResultClick = useCallback((result: SearchResult, position: number) => {
+    fetch('/api/analytics/click', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        searchLogId: 0,
+        position,
+        url: result.url,
+        pageId: result.id,
+      }),
+    }).catch(() => {});
+  }, []);
+
+  const appliedFilters = results?.appliedFilters;
+
   if (!query) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
@@ -99,6 +115,7 @@ function SearchContent() {
               onSubmit={handleSearch}
               showSuggestions
               large
+              placeholder="Search the web..."
             />
           </motion.div>
           {trending.length > 0 && (
@@ -142,6 +159,7 @@ function SearchContent() {
               query={searchInput}
               onChange={setSearchInput}
               onSubmit={handleSearch}
+              placeholder="Search the web..."
             />
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -158,9 +176,20 @@ function SearchContent() {
 
       <main className="max-w-4xl mx-auto px-4 py-6">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground mt-4">Searching the web...</p>
+          <div className="space-y-4">
+            <Skeleton className="h-5 w-64 mb-6" />
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="bg-card border border-border rounded-xl p-5 space-y-3">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-5 w-3/4" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-2/3" />
+                <div className="flex gap-4 mt-2">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : error ? (
           <motion.div
@@ -185,10 +214,53 @@ function SearchContent() {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
           >
-            <p className="text-sm text-muted-foreground mb-6">
+            <p className="text-sm text-muted-foreground mb-4">
               About <span className="text-foreground font-medium">{results.totalResults.toLocaleString()}</span> results{' '}
               <span className="text-muted-foreground/60">({results.responseTimeMs}ms)</span>
             </p>
+
+            {results.aiSummary && (
+              <div className="mb-6 p-4 bg-accent/30 border border-border rounded-xl">
+                <div className="flex items-center gap-2 mb-2">
+                  <MessageSquare className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium text-foreground">AI Summary</span>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">{results.aiSummary}</p>
+              </div>
+            )}
+
+            {appliedFilters && (
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                {appliedFilters.site && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-secondary text-secondary-foreground rounded-full">
+                    site:{appliedFilters.site}
+                    <button
+                      onClick={() => router.push(`/search?q=${encodeURIComponent(query.replace(/site:\S+/i, '').trim())}`)}
+                      className="hover:text-foreground"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {appliedFilters.fileType && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-secondary text-secondary-foreground rounded-full">
+                    filetype:{appliedFilters.fileType}
+                  </span>
+                )}
+                {appliedFilters.datePreset && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-secondary text-secondary-foreground rounded-full">
+                    {appliedFilters.datePreset}
+                  </span>
+                )}
+                {appliedFilters.exactPhrases?.map((p) => (
+                  <span key={p} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-secondary text-secondary-foreground rounded-full">
+                    &ldquo;{p}&rdquo;
+                  </span>
+                ))}
+              </div>
+            )}
+
             {results.correctedQuery && (
               <div className="mb-6 p-4 bg-accent/30 border border-border rounded-xl text-sm">
                 Showing results for <strong className="text-foreground">{results.correctedQuery}</strong>.{' '}
@@ -200,7 +272,32 @@ function SearchContent() {
                 </button>
               </div>
             )}
-            <SearchResults results={results.results} query={query} />
+
+            <SearchResults
+              results={results.results}
+              query={query}
+              appliedFilters={appliedFilters}
+              onResultClick={handleResultClick}
+            />
+
+            {results.relatedQuestions && results.relatedQuestions.length > 0 && (
+              <div className="mt-8 p-5 bg-card border border-border rounded-xl">
+                <h3 className="text-sm font-semibold text-foreground mb-3">Related questions</h3>
+                <div className="space-y-2">
+                  {results.relatedQuestions.map((q) => (
+                    <button
+                      key={q}
+                      onClick={() => router.push(`/search?q=${encodeURIComponent(q)}`)}
+                      className="w-full flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg px-3 py-2 transition-colors text-left"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                      <span>{q}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <Pagination
               currentPage={page}
               totalPages={results.totalPages}

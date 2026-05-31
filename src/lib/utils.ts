@@ -54,13 +54,16 @@ export function sanitizeHtml(text: string): string {
     .replace(/'/g, '&#039;');
 }
 
-export function highlightMatches(text: string, query: string): string {
-  if (!query.trim()) return sanitizeHtml(text);
-  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`(${escaped})`, 'gi');
+export function highlightMatches(text: string, query: string | string[]): string {
+  const terms = Array.isArray(query) ? query : [query];
+  const patterns = terms
+    .filter(t => t.trim())
+    .map(t => `(${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`);
+  if (!patterns.length) return sanitizeHtml(text);
+  const regex = new RegExp(patterns.join('|'), 'gi');
   return sanitizeHtml(text).replace(
     regex,
-    '<mark class="bg-yellow-200 dark:bg-yellow-700 rounded px-0.5">$1</mark>'
+    '<mark class="bg-yellow-200 dark:bg-yellow-700/70 text-foreground rounded px-0.5">$1</mark>'
   );
 }
 
