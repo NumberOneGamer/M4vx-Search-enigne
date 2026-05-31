@@ -1,7 +1,14 @@
 import { db } from '@/db';
 import { searchTerms } from '@/db/schema/searchTerms';
 import { pages } from '@/db/schema/pages';
+import { rankings } from '@/db/schema/rankings';
 import { eq, sql, ilike, desc } from 'drizzle-orm';
+
+export interface SuggestionItem {
+  text: string;
+  volume?: number;
+  source?: 'search' | 'page' | 'keyword';
+}
 
 export async function getSuggestions(prefix: string, limit = 8): Promise<string[]> {
   if (prefix.length < 2) return [];
@@ -27,11 +34,29 @@ export async function getSuggestions(prefix: string, limit = 8): Promise<string[
     )
     .limit(limit - terms.length);
 
+  const existingCount = terms.length + pageTitles.filter(t => t.title).length;
+
+  let keywordSuggestions: string[] = [];
+  if (existingCount < limit) {
+    const keywords = await db
+      .select({ keyword: rankings.keyword })
+      .from(rankings)
+      .where(ilike(rankings.keyword, `${prefix}%`))
+      .groupBy(rankings.keyword)
+      .orderBy(desc(sql`AVG(${rankings.overallScore})`))
+      .limit(limit - existingCount);
+
+    keywordSuggestions = keywords
+      .map((k) => k.keyword)
+      .filter((k) => !existingTerms.has(k.toLowerCase()));
+  }
+
   const allSuggestions = [
     ...terms.map((t) => t.term),
     ...pageTitles
       .map((p) => p.title)
       .filter((t): t is string => t !== null && !existingTerms.has(t.toLowerCase())),
+    ...keywordSuggestions,
   ];
 
   return allSuggestions.slice(0, limit);

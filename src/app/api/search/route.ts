@@ -10,6 +10,7 @@ import { getSuggestions, getRelatedSearches, recordSearchTerm } from '@/lib/sear
 import { cacheGet, cacheSet, CACHE_TTL } from '@/lib/cache';
 import { generateSessionId } from '@/lib/utils';
 import { parseQuery, buildDateCondition } from '@/lib/search/query-parser';
+import { getAiAssistant } from '@/services/ai-assistant';
 import type { SearchResponse, SearchResult } from '@/types';
 
 const FTS_COL = sql`to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, ''))`;
@@ -194,6 +195,10 @@ export async function GET(request: Request) {
     const suggestions = await getSuggestions(effectiveQ);
     const relatedSearches = await getRelatedSearches(effectiveQ);
 
+    const aiResult = results.length > 0
+      ? await getAiAssistant(effectiveQ, results.map(r => r.id))
+      : { summary: null, relatedQuestions: [] as string[] };
+
     const responseTimeMs = Date.now() - startTime;
 
     const response: SearchResponse = {
@@ -206,6 +211,8 @@ export async function GET(request: Request) {
       relatedSearches,
       suggestions,
       responseTimeMs,
+      aiSummary: aiResult.summary,
+      relatedQuestions: aiResult.relatedQuestions,
       appliedFilters: effectiveSite || effectiveFileType || effectiveExclude.length > 0 || effectiveDateAfter || effectiveDateBefore || effectiveExactPhrases.length > 0
         ? {
             site: effectiveSite || undefined,

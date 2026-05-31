@@ -8,6 +8,10 @@ const publicPaths = [
   '/api/suggestions',
 ];
 
+const userPaths = [
+  '/api/user',
+];
+
 const adminPaths = [
   '/api/admin',
   '/admin',
@@ -31,11 +35,11 @@ export async function middleware(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
   const authCookie = request.cookies.get('auth_token');
 
-  if (adminPaths.some((p) => pathname.startsWith(p))) {
-    const token = authHeader?.startsWith('Bearer ')
-      ? authHeader.slice(7)
-      : authCookie?.value;
+  const token = authHeader?.startsWith('Bearer ')
+    ? authHeader.slice(7)
+    : authCookie?.value;
 
+  if (adminPaths.some((p) => pathname.startsWith(p))) {
     if (!token) {
       if (pathname.startsWith('/api/')) {
         return NextResponse.json(
@@ -65,6 +69,25 @@ export async function middleware(request: NextRequest) {
         );
       }
       return NextResponse.redirect(new URL('/', request.url));
+    }
+
+    return NextResponse.next();
+  }
+
+  if (userPaths.some((p) => pathname.startsWith(p))) {
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Authentication required', statusCode: 401 },
+        { status: 401 }
+      );
+    }
+
+    const payload = await verifyTokenEdge(token);
+    if (!payload) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Invalid token', statusCode: 401 },
+        { status: 401 }
+      );
     }
   }
 

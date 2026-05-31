@@ -8,3 +8,6 @@ export * from './searchLogs';
 export * from './clicks';
 export * from './rankings';
 export * from './settings';
+export * from './searchHistory';
+export * from './savedSearches';
+export * from './userPreferences';
