@@ -18,7 +18,7 @@ export const searchSchema = z.object({
   q: z.string().min(1, 'Query is required').max(500),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(10),
-  type: z.enum(['all', 'web', 'news', 'images']).default('all'),
+  type: z.enum(['all', 'web', 'news', 'images', 'videos', 'ai']).default('all'),
   language: z.string().max(10).optional(),
   fileType: z.string().max(50).optional(),
   site: z.string().max(500).optional(),

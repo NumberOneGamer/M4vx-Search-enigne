@@ -11,3 +11,8 @@ export * from './settings';
 export * from './searchHistory';
 export * from './savedSearches';
 export * from './userPreferences';
+export * from './newsArticles';
+export * from './newsPublishers';
+export * from './videos';
+export * from './images';
+export * from './searchIntelligence';

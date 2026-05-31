@@ -1,0 +1,31 @@
+import { pgTable, serial, varchar, text, integer, timestamp, doublePrecision, boolean, index } from 'drizzle-orm/pg-core';
+
+export const videos = pgTable('videos', {
+  id: serial('id').primaryKey(),
+  url: varchar('url', { length: 2048 }).notNull().unique(),
+  title: text('title').notNull(),
+  description: text('description'),
+  thumbnailUrl: text('thumbnail_url'),
+  duration: integer('duration'),
+  channelName: varchar('channel_name', { length: 500 }),
+  channelUrl: varchar('channel_url', { length: 2048 }),
+  publishDate: timestamp('publish_date'),
+  viewCount: integer('view_count').default(0),
+  tags: text('tags'),
+  source: varchar('source', { length: 100 }),
+  embedUrl: text('embed_url'),
+  quality: varchar('quality', { length: 20 }),
+  contentHash: varchar('content_hash', { length: 64 }),
+  isIndexed: boolean('is_indexed').default(false),
+  indexedAt: timestamp('indexed_at'),
+  searchCount: integer('search_count').default(0),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  titleIdx: index('video_title_idx').on(table.title),
+  channelIdx: index('video_channel_idx').on(table.channelName),
+  publishDateIdx: index('video_publish_date_idx').on(table.publishDate),
+  durationIdx: index('video_duration_idx').on(table.duration),
+  qualityIdx: index('video_quality_idx').on(table.quality),
+  urlIdx: index('video_url_idx').on(table.url),
+}));

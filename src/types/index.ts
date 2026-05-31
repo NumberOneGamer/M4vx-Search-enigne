@@ -2,7 +2,7 @@ export interface SearchQuery {
   q: string;
   page?: number;
   pageSize?: number;
-  type?: 'all' | 'web' | 'news' | 'images';
+  type?: 'all' | 'web' | 'news' | 'images' | 'videos' | 'ai';
   language?: string;
   fileType?: string;
   site?: string;
@@ -49,6 +49,78 @@ export interface AppliedFilters {
   dateBefore?: string;
   datePreset?: string;
   exactPhrases?: string[];
+  language?: string;
+  sort?: 'relevance' | 'date';
+}
+
+export interface NewsResult {
+  id: number;
+  headline: string;
+  url: string;
+  description: string;
+  body?: string;
+  author: string | null;
+  publisher: string | null;
+  publisherLogo: string | null;
+  publishDate: string | null;
+  updatedDate: string | null;
+  featuredImage: string | null;
+  category: string | null;
+  source: string | null;
+  score: number;
+}
+
+export interface VideoResult {
+  id: number;
+  title: string;
+  url: string;
+  description: string;
+  thumbnailUrl: string | null;
+  duration: number | null;
+  channelName: string | null;
+  channelUrl: string | null;
+  publishDate: string | null;
+  viewCount: number | null;
+  tags: string | null;
+  source: string | null;
+  embedUrl: string | null;
+  quality: string | null;
+  score: number;
+}
+
+export interface ImageResult {
+  id: number;
+  url: string;
+  altText: string | null;
+  caption: string | null;
+  pageTitle: string | null;
+  pageUrl: string | null;
+  width: number | null;
+  height: number | null;
+  fileSize: number | null;
+  mimeType: string | null;
+  dominantColor: string | null;
+  score: number;
+}
+
+export interface AiAnswerResponse {
+  answer: string;
+  summary: string;
+  keyPoints: string[];
+  sources: { title: string; url: string; snippet: string }[];
+  confidenceScore: number;
+  relatedQuestions: string[];
+  queryType: 'informational' | 'navigational' | 'transactional' | 'question';
+}
+
+export interface UnifiedSearchResponse {
+  web?: SearchResponse;
+  news?: { results: NewsResult[]; totalResults: number; page: number; pageSize: number };
+  videos?: { results: VideoResult[]; totalResults: number; page: number; pageSize: number };
+  images?: { results: ImageResult[]; totalResults: number; page: number; pageSize: number };
+  ai?: AiAnswerResponse | null;
+  query: string;
+  responseTimeMs: number;
 }
 
 export interface SuggestionResponse {
@@ -95,6 +167,12 @@ export interface AdminStats {
   crawlRate: { date: string; count: number }[];
   searchTrend: { date: string; count: number }[];
   domainDistribution: { name: string; count: number }[];
+  totalNewsArticles?: number;
+  totalVideos?: number;
+  totalImages?: number;
+  indexedNews?: number;
+  indexedVideos?: number;
+  indexedImages?: number;
 }
 
 export interface AuthUser {
@@ -140,3 +218,44 @@ export const DEFAULT_RANKING_FACTORS: RankingFactors = {
   engagementWeight: 0.10,
   domainAuthorityWeight: 0.15,
 };
+
+export type SearchTab = 'all' | 'web' | 'news' | 'videos' | 'images' | 'ai';
+
+export interface TrendingItem {
+  term: string;
+  score: number;
+  type: 'trending' | 'rising' | 'daily';
+  period: string;
+}
+
+export interface NewsFilter {
+  timeFrame?: 'hour' | 'today' | 'week' | 'month' | 'year';
+  category?: 'technology' | 'gaming' | 'business' | 'science' | 'sports' | 'politics' | 'entertainment';
+  publisher?: string;
+}
+
+export interface VideoFilter {
+  duration?: 'short' | 'medium' | 'long';
+  uploadDate?: 'today' | 'week' | 'month' | 'year';
+  quality?: 'hd' | 'fullhd' | '4k';
+  source?: string;
+}
+
+export interface ImageFilter {
+  size?: 'small' | 'medium' | 'large' | 'ultrahd';
+  orientation?: 'landscape' | 'portrait' | 'square';
+  color?: string;
+  type?: 'photo' | 'illustration' | 'icon' | 'gif';
+}
+
+export interface PublisherInfo {
+  id: number;
+  name: string;
+  url: string;
+  logoUrl: string | null;
+  isApproved: boolean;
+  isBanned: boolean;
+  totalArticles: number;
+  totalViews: number;
+  lastArticleAt: string | null;
+}
