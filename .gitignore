@@ -6,5 +6,6 @@ node_modules/
 .env.production
 dist/
 build/
+.open-next/
 *.log
 .DS_Store
