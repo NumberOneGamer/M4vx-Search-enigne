@@ -21,18 +21,20 @@ function simpleHash(text: string): string {
 }
 
 function matchTag(html: string, tagName: string, start: number): { tag: string; inner: string; end: number } | null {
-  const regex = new RegExp(`<${tagName}(\\s[^>]*)?>`, 'i');
-  regex.lastIndex = start;
-  const openMatch = regex.exec(html);
-  if (!openMatch) return null;
+  const lowerHtml = html.toLowerCase();
+  const openStart = lowerHtml.indexOf(`<${tagName}`, start);
+  if (openStart === -1) return null;
 
-  const openEnd = openMatch.index + openMatch[0].length;
+  const tagEnd = html.indexOf('>', openStart);
+  if (tagEnd === -1) return null;
+
+  const openTag = html.slice(openStart, tagEnd + 1);
   const closeTag = `</${tagName}>`;
-  const closeIdx = html.toLowerCase().indexOf(closeTag, openEnd);
+  const closeIdx = lowerHtml.indexOf(closeTag, tagEnd + 1);
   if (closeIdx === -1) return null;
 
-  const inner = html.slice(openEnd, closeIdx);
-  return { tag: openMatch[0], inner, end: closeIdx + closeTag.length };
+  const inner = html.slice(tagEnd + 1, closeIdx);
+  return { tag: openTag, inner, end: closeIdx + closeTag.length };
 }
 
 function extractAttr(html: string, attr: string): string | null {
