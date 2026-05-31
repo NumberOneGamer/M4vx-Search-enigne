@@ -16,7 +16,8 @@
     "crawler": "tsx --env-file=.env src/services/crawler.ts",
     "indexer": "tsx --env-file=.env src/services/indexer.ts",
     "ranker": "tsx --env-file=.env src/services/ranker.ts",
-    "create-admin": "tsx --env-file=.env scripts/create-admin.mts"
+    "create-admin": "tsx --env-file=.env scripts/create-admin.mts",
+    "deploy:crawler": "npx wrangler deploy --config wrangler.crawler.toml"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.9.0",
