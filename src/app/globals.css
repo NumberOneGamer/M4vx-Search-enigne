@@ -101,6 +101,12 @@
     pointer-events: none;
   }
   .text-gradient {
+    background: linear-gradient(135deg, #000 0%, rgb(0 0 0 / 0.6) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .dark .text-gradient {
     background: linear-gradient(135deg, #fff 0%, rgb(255 255 255 / 0.6) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
