@@ -290,11 +290,16 @@ export async function processBatch(batchSize = CONCURRENCY): Promise<{ processed
   const limited = batch.slice(0, batchSize);
   if (limited.length === 0) return { processed: 0, completed: 0, failed: 0 };
 
-  const results = await Promise.allSettled(limited.map(processUrl));
-  const completed = results.filter((r) => r.status === 'fulfilled').length;
-  const failed = results.filter((r) => r.status === 'rejected').length;
+  for (const item of limited) {
+    await processUrl(item);
+  }
 
-  return { processed: limited.length, completed, failed };
+  const stats = await getCrawlStats();
+  return {
+    processed: limited.length,
+    completed: stats.completed,
+    failed: stats.failed,
+  };
 }
 
 export async function addSeedUrls(urls: string[], depth = 2): Promise<void> {
