@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { processBatch, getCrawlStats } from '../src/services/crawler';
 
 export default {

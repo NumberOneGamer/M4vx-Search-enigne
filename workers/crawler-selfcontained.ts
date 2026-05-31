@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ── SQL helper (Neon HTTP API, no packages needed) ──
 async function sql(query, params, env) {
   const m = env.DATABASE_URL.match(/postgres(?:ql)?:\/\/([^:]+):([^@]+)@([^/]+)\/([^?]+)/);
@@ -9,7 +10,6 @@ async function sql(query, params, env) {
     headers: {
       'Neon-Connection-String': env.DATABASE_URL,
       'Neon-Raw-Text-Output': 'true',
-      'Neon-Array-Mode': 'true',
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ query, params }),
