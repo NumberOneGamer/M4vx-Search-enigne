@@ -7,7 +7,7 @@
     "build": "next build",
     "cf:build": "npx @opennextjs/cloudflare build",
     "cf:deploy": "npm run cf:build && npx @opennextjs/cloudflare deploy",
-    "pages:build": "WRANGLER_BUILD_PLATFORM=node WRANGLER_BUILD_CONDITIONS= npm run cf:build && node scripts/patch-handler.mjs && cp .open-next/worker.js .open-next/_worker.js",
+    "pages:build": "node scripts/pre-build.mjs && WRANGLER_BUILD_PLATFORM=node WRANGLER_BUILD_CONDITIONS= npm run cf:build && node scripts/patch-handler.mjs",
     "start": "next start",
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",

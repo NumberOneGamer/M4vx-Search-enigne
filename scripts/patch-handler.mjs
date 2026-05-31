@@ -1,7 +1,9 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { join } from "path";
+import { readFileSync, writeFileSync, existsSync, copyFileSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
-const root = join(import.meta.dirname, "..", ".open-next");
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const root = join(__dirname, "..", ".open-next");
 
 // ── Patch 1: Remove node:sqlite from handler.mjs ──
 const handlerPath = join(root, "server-functions", "default", "handler.mjs");
@@ -19,29 +21,32 @@ if (existsSync(handlerPath)) {
   console.log("¬ handler.mjs not found");
 }
 
-// ── Patch 2: Serve static assets via env.ASSETS in worker.js ──
+// ── Patch 2: Generate _routes.json ──
+// Exclude static assets from the Advanced Mode worker so Cloudflare CDN serves them directly.
+// The OpenNext build puts assets at the root of the output directory on CI (Linux),
+// so `/_next/static/*` maps directly to files in the output directory.
+const routesPath = join(root, "_routes.json");
+const routes = {
+  version: 1,
+  include: ["/*"],
+  exclude: [
+    "/_next/static/*",
+    "/_next/image*",
+    "/favicon.ico",
+    "/favicon*",
+    "/robots.txt",
+    "/sitemap.xml",
+  ],
+};
+writeFileSync(routesPath, JSON.stringify(routes, null, 2), "utf-8");
+console.log("✓ Created _routes.json: static assets excluded from worker");
+
+// ── Patch 3: Copy worker.js → _worker.js for Advanced Mode ──
 const workerPath = join(root, "worker.js");
+const workerDest = join(root, "_worker.js");
 if (existsSync(workerPath)) {
-  let content = readFileSync(workerPath, "utf-8");
-  // Inject static asset serving before the middleware handler call.
-  // Pattern: `const reqOrResp = await middlewareHandler(request, env, ctx);`
-  const assetServingCode = `
-  // Serve static assets from Cloudflare Pages ASSETS binding
-  const __url = new URL(request.url);
-  if (__url.pathname.startsWith('/_next/') || __url.pathname === '/favicon.ico') {
-    const __asset = env.ASSETS;
-    if (__asset) {
-      const __assetResponse = await __asset.fetch(request);
-      if (__assetResponse.status !== 404) return __assetResponse;
-    }
-  }
-`;
-  content = content.replace(
-    /const reqOrResp = await middlewareHandler\(request, env, ctx\);/,
-    assetServingCode + "\n  const reqOrResp = await middlewareHandler(request, env, ctx);"
-  );
-  writeFileSync(workerPath, content, "utf-8");
-  console.log("✓ Patched worker.js: added env.ASSETS static asset serving");
+  copyFileSync(workerPath, workerDest);
+  console.log("✓ Copied worker.js → _worker.js");
 } else {
   console.log("¬ worker.js not found");
 }
