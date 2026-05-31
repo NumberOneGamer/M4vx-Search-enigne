@@ -71,6 +71,10 @@
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
+  mark {
+    background-color: transparent;
+    color: inherit;
+  }
 }
 
 @layer utilities {
