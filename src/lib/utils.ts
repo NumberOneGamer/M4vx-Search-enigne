@@ -63,7 +63,7 @@ export function highlightMatches(text: string, query: string | string[]): string
   const regex = new RegExp(patterns.join('|'), 'gi');
   return sanitizeHtml(text).replace(
     regex,
-    '<mark class="bg-white dark:bg-white text-black rounded px-0.5">$1</mark>'
+    '<mark class="bg-black dark:bg-white text-white dark:text-black rounded px-0.5">$1</mark>'
   );
 }
 
