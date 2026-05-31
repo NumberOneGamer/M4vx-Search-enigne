@@ -21,8 +21,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ...result, stats });
   } catch (error) {
+    const detail = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[Crawler API] Error:', error);
     return NextResponse.json(
-      { error: 'Crawl Error', message: 'Failed to process batch', statusCode: 500 },
+      { error: 'Crawl Error', message: 'Failed to process batch', detail, statusCode: 500 },
       { status: 500 }
     );
   }

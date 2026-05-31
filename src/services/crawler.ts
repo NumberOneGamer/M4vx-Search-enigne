@@ -5,6 +5,7 @@ import { pages } from '@/db/schema/pages';
 import { crawlQueue } from '@/db/schema/crawlQueue';
 import { backlinks } from '@/db/schema/backlinks';
 import { eq, and, sql, inArray, isNull, lt, or, desc } from 'drizzle-orm';
+import { parseHtml } from '@/lib/crawler/parser';
 import { checkRobotsTxt, normalizeUrl, isValidUrl, shouldCrawl } from '@/lib/crawler/robots';
 import { waitForRateLimit } from '@/lib/crawler/rate-limiter';
 
@@ -103,8 +104,7 @@ async function processUrl(queueItem: typeof crawlQueue.$inferSelect): Promise<vo
     });
 
     const html = await response.text();
-    const { parseHtml: parseHtmlFn } = await import('@/lib/crawler/parser');
-    const parsed = parseHtmlFn(html, url);
+    const parsed = parseHtml(html, url);
 
     const pageCount = await db
       .select({ count: sql<number>`count(*)` })

@@ -1,5 +1,3 @@
-import * as cheerio from 'cheerio';
-
 export interface ParsedPage {
   title: string;
   metaDescription: string;
@@ -22,52 +20,117 @@ function simpleHash(text: string): string {
   return Math.abs(hash).toString(36);
 }
 
-function extractTextFromElement($el: cheerio.Cheerio<any>): string {
-  const $ = cheerio.load($el.html() || '');
-  $.root().find('script, style, noscript, iframe, svg, nav, footer, header, aside').remove();
-  return $.root().text().replace(/\s+/g, ' ').trim();
+function matchTag(html: string, tagName: string, start: number): { tag: string; inner: string; end: number } | null {
+  const regex = new RegExp(`<${tagName}(\\s[^>]*)?>`, 'i');
+  regex.lastIndex = start;
+  const openMatch = regex.exec(html);
+  if (!openMatch) return null;
+
+  const openEnd = openMatch.index + openMatch[0].length;
+  const closeTag = `</${tagName}>`;
+  const closeIdx = html.toLowerCase().indexOf(closeTag, openEnd);
+  if (closeIdx === -1) return null;
+
+  const inner = html.slice(openEnd, closeIdx);
+  return { tag: openMatch[0], inner, end: closeIdx + closeTag.length };
+}
+
+function extractAttr(html: string, attr: string): string | null {
+  const regex = new RegExp(`${attr}\\s*=\\s*"([^"]*)"`, 'i');
+  const match = regex.exec(html);
+  return match ? match[1] : null;
+}
+
+function stripTags(text: string): string {
+  return text.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function removeElements(html: string, selectors: string[]): string {
+  let result = html;
+  for (const sel of selectors) {
+    const tags = sel.split(',').map(s => s.trim());
+    for (const tag of tags) {
+      const name = tag.replace(/[.#].*$/, '').trim() || 'div';
+      const regex = new RegExp(`<${name}[^>]*>[\\s\\S]*?<\\/${name}>`, 'gi');
+      result = result.replace(regex, '');
+      result = result.replace(new RegExp(`<${name}[^>]*\\/>`, 'gi'), '');
+    }
+  }
+  return result;
 }
 
 export function parseHtml(html: string, baseUrl: string): ParsedPage {
-  const $ = cheerio.load(html);
+  let cleaned = removeElements(html, [
+    'script', 'style', 'noscript', 'iframe', 'svg',
+    'nav', 'footer', 'header', 'aside',
+    '.sidebar', '.comments', '.advertisement', '.menu', '.nav',
+  ]);
 
-  $('script, style, noscript, iframe, svg, nav, footer, header, aside, .sidebar, .comments, .advertisement, .menu, .nav').remove();
-
-  const title =
-    $('title').first().text().trim() ||
-    $('meta[property="og:title"]').attr('content')?.trim() ||
-    $('h1').first().text().trim() ||
+  let title =
+    stripTags(matchTag(cleaned, 'title', 0)?.inner || '') ||
+    extractAttr(cleaned.match(/<meta[^>]+property="og:title"[^>]*>/i)?.[0] || '', 'content') ||
+    stripTags(matchTag(cleaned, 'h1', 0)?.inner || '') ||
     '';
 
+  const metaDescMatch = cleaned.match(/<meta[^>]+name="description"[^>]*>/i);
+  const metaDescOgMatch = cleaned.match(/<meta[^>]+property="og:description"[^>]*>/i);
+
   const metaDescription =
-    $('meta[name="description"]').attr('content')?.trim() ||
-    $('meta[property="og:description"]').attr('content')?.trim() ||
+    extractAttr(metaDescMatch?.[0] || '', 'content') ||
+    extractAttr(metaDescOgMatch?.[0] || '', 'content') ||
     '';
 
   const headings: string[] = [];
-  $('h1, h2, h3, h4, h5, h6').each((_, el) => {
-    const text = $(el).text().trim();
-    if (text) headings.push(text);
-  });
+  for (let level = 1; level <= 6; level++) {
+    let pos = 0;
+    while (pos < cleaned.length) {
+      const hTag = `h${level}`;
+      const matched = matchTag(cleaned, hTag, pos);
+      if (!matched) break;
+      const text = stripTags(matched.inner);
+      if (text) headings.push(text);
+      pos = matched.end;
+    }
+  }
 
-  const mainContent =
-    $('main, article, [role="main"], .content, .post, .entry, #content, #main').first().html() ||
-    $('body').html() ||
-    '';
+  const selectors = ['main', 'article', '[role="main"]', '.content', '.post', '.entry', '#content', '#main'];
+  let mainHtml = '';
+  for (const sel of selectors) {
+    const name = sel.replace(/[.#].*$/, '').trim() || 'div';
+    const attrFilter = sel.includes('.') || sel.includes('#') || sel.includes('[');
+    if (attrFilter) {
+      const attrPattern = sel
+        .replace(/\./g, '\\bclass\\s*=\\"[^\\"]*')
+        .replace(/#/g, '\\bid\\s*=\\"')
+        .replace(/\[/g, '\\b')
+        .replace(/\]/g, '\\b');
+      const attrRegex = new RegExp(`<${name}[^>]*${attrPattern}[^>]*>[\\s\\S]*?<\\/${name}>`, 'i');
+      const m = attrRegex.exec(cleaned);
+      if (m) { mainHtml = m[0]; break; }
+    } else {
+      const m = matchTag(cleaned, name, 0);
+      if (m) { mainHtml = cleaned.slice(m.tag.length, m.end - `</${name}>`.length); break; }
+    }
+  }
 
-  const $content = cheerio.load(mainContent);
-  $content('script, style, noscript, iframe, svg').remove();
-  const content = $content.root().text().replace(/\s+/g, ' ').trim();
+  if (!mainHtml) {
+    const bodyMatch = matchTag(cleaned, 'body', 0);
+    mainHtml = bodyMatch?.inner || cleaned;
+  }
 
+  mainHtml = removeElements(mainHtml, ['script', 'style', 'noscript', 'iframe', 'svg']);
+  const content = stripTags(mainHtml);
   const wordCount = content.split(/\s+/).filter(Boolean).length;
 
+  const baseHostname = new URL(baseUrl).hostname;
   const internalLinks: string[] = [];
   const externalLinks: string[] = [];
-  const baseHostname = new URL(baseUrl).hostname;
 
-  $('a[href]').each((_, el) => {
-    const href = $(el).attr('href');
-    if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+  const linkRegex = /<a[^>]+href\s*=\s*"([^"]*)"[^>]*>/gi;
+  let linkMatch;
+  while ((linkMatch = linkRegex.exec(cleaned)) !== null) {
+    const href = linkMatch[1];
+    if (!href || href.startsWith('#') || href.startsWith('javascript:')) continue;
 
     try {
       const absoluteUrl = new URL(href, baseUrl).href;
@@ -80,18 +143,17 @@ export function parseHtml(html: string, baseUrl: string): ParsedPage {
         } else {
           if (!externalLinks.includes(urlStr)) externalLinks.push(urlStr);
         }
-      } catch {
-      }
-    } catch {
-    }
-  });
+      } catch {}
+    } catch {}
+  }
 
   const contentHash = simpleHash(content.slice(0, 10000));
 
-  const contentType =
-    $('meta[property="article:published_time"]').length > 0 ? 'article' :
-    $('meta[property="og:type"]').attr('content') === 'article' ? 'article' :
-    'webpage';
+  const hasArticleTime = /<meta[^>]+property="article:published_time"[^>]*>/i.test(cleaned);
+  const ogType = extractAttr(
+    cleaned.match(/<meta[^>]+property="og:type"[^>]*>/i)?.[0] || '', 'content'
+  );
+  const contentType = hasArticleTime || ogType === 'article' ? 'article' : 'webpage';
 
   return {
     title,
