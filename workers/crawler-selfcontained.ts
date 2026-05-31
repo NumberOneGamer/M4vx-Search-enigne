@@ -123,8 +123,6 @@ async function processUrl(row, env) {
         }
       }
     }
-      }
-    }
   } catch (e) {
     try {
       const attempts = (row.attempts||0)+1;
@@ -154,7 +152,7 @@ export default {
       try { const d = new URL(u); steps.push({ step:'parse-url', ok:true, host: d.hostname });
         try { const rr=await fetch(`https://${d.hostname}/robots.txt`,{headers:{'User-Agent':UA},signal:AbortSignal.timeout(5000)}); const t=rr.ok?await rr.text():''; const lines=(t||'').split(/\r?\n/).map(l=>l.trim()); let agent='',blocked=false; for(const l of lines){if(/^user-agent:\s*/i.test(l))agent=l.replace(/^user-agent:\s*/i,'').trim().toLowerCase();if(agent==='*'&&/^disallow:\s*\/\s*$/i.test(l)){blocked=true;break}} steps.push({step:'robots-txt',ok:true,status:rr.status,blocked}); } catch(e) { steps.push({step:'robots-txt',ok:false,error:String(e)}); }
         try { const res = await fetch(u, { headers:{'User-Agent':UA,Accept:'text/html,application/xhtml+xml'}, signal:AbortSignal.timeout(10000) }); const html=await res.text(); steps.push({ step:'fetch', ok:true, status:res.status, size:html.length });
-          try { const p = parseHtml(html, u); steps.push({ step:'parse', ok:true, title:p.title, wordCount:p.wordCount, linkCount:p.internalLinks.length }); } catch(e) { steps.push({ step:'parse', ok:false, error:String(e) }); }
+          try { const p = parseHtml(html, u); steps.push({ step:'parse', ok:true, title:p.title, wordCount:p.wordCount, linkCount:p.internalLinks.length, externalLinkCount:p.externalLinks.length }); } catch(e) { steps.push({ step:'parse', ok:false, error:String(e) }); }
         } catch(e) { steps.push({ step:'fetch', ok:false, error:String(e) }); }
       } catch(e) { steps.push({ step:'parse-url', ok:false, error:String(e) }); }
       return new Response(JSON.stringify({ url: u, steps }), { headers:{'Content-Type':'application/json'} });
