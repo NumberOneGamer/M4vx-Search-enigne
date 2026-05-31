@@ -84,7 +84,16 @@ async function processUrl(row, env) {
     const domain = new URL(url).hostname;
     try {
       const rr = await fetch(`https://${domain}/robots.txt`, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(5000) });
-      if (rr.ok) { const t = await rr.text(); if (/^disallow:\s*\/\s*$/im.test(t)) { await sql("UPDATE crawl_queue SET status='failed',error_message=$1,completed_at=NOW() WHERE id=$2",['Blocked by robots.txt',id], env); return; } }
+      if (rr.ok) {
+        const t = await rr.text();
+        const lines = t.split(/\r?\n/).map(l=>l.trim());
+        let agent = '', blocked = false;
+        for (const l of lines) {
+          if (/^user-agent:\s*/i.test(l)) agent = l.replace(/^user-agent:\s*/i,'').trim().toLowerCase();
+          if (agent === '*' && /^disallow:\s*\/\s*$/i.test(l)) { blocked = true; break; }
+        }
+        if (blocked) { await sql("UPDATE crawl_queue SET status='failed',error_message=$1,completed_at=NOW() WHERE id=$2",['Blocked by robots.txt',id], env); return; }
+      }
     } catch {}
 
     const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' }, signal: AbortSignal.timeout(10000) });
@@ -127,7 +136,7 @@ export default {
       if (!u) return new Response(JSON.stringify({ error: 'missing ?url=' }), { status:400, headers:{'Content-Type':'application/json'} });
       const steps = [];
       try { const d = new URL(u); steps.push({ step:'parse-url', ok:true, host: d.hostname });
-        try { const rr = await fetch(`https://${d.hostname}/robots.txt`, { headers:{'User-Agent':UA}, signal:AbortSignal.timeout(5000) }); const t=rr.ok?await rr.text():''; const blocked=/^disallow:\s*\/\s*$/im.test(t); steps.push({ step:'robots-txt', ok:true, status:rr.status, blocked, match:t.slice(0,200) }); } catch(e) { steps.push({ step:'robots-txt', ok:false, error:String(e) }); }
+        try { const rr=await fetch(`https://${d.hostname}/robots.txt`,{headers:{'User-Agent':UA},signal:AbortSignal.timeout(5000)}); const t=rr.ok?await rr.text():''; const lines=(t||'').split(/\r?\n/).map(l=>l.trim()); let agent='',blocked=false; for(const l of lines){if(/^user-agent:\s*/i.test(l))agent=l.replace(/^user-agent:\s*/i,'').trim().toLowerCase();if(agent==='*'&&/^disallow:\s*\/\s*$/i.test(l)){blocked=true;break}} steps.push({step:'robots-txt',ok:true,status:rr.status,blocked}); } catch(e) { steps.push({step:'robots-txt',ok:false,error:String(e)}); }
         try { const res = await fetch(u, { headers:{'User-Agent':UA,Accept:'text/html,application/xhtml+xml'}, signal:AbortSignal.timeout(10000) }); const html=await res.text(); steps.push({ step:'fetch', ok:true, status:res.status, size:html.length });
           try { const p = parseHtml(html, u); steps.push({ step:'parse', ok:true, title:p.title, wordCount:p.wordCount, linkCount:p.internalLinks.length }); } catch(e) { steps.push({ step:'parse', ok:false, error:String(e) }); }
         } catch(e) { steps.push({ step:'fetch', ok:false, error:String(e) }); }
