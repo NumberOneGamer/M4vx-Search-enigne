@@ -17,7 +17,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params;
 
   try {
-    await db.delete(domains).where(eq(domains.id, id));
+    await db.delete(domains).where(eq(domains.id, Number(id)));
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(

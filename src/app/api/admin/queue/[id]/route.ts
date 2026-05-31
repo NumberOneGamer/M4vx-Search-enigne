@@ -17,7 +17,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params;
 
   try {
-    await db.delete(crawlQueue).where(eq(crawlQueue.id, id));
+    await db.delete(crawlQueue).where(eq(crawlQueue.id, Number(id)));
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(
@@ -57,7 +57,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const [item] = await db
       .update(crawlQueue)
       .set(updates)
-      .where(eq(crawlQueue.id, id))
+      .where(eq(crawlQueue.id, Number(id)))
       .returning();
 
     if (!item) {
