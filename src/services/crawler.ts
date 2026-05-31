@@ -5,7 +5,6 @@ import { pages } from '@/db/schema/pages';
 import { crawlQueue } from '@/db/schema/crawlQueue';
 import { backlinks } from '@/db/schema/backlinks';
 import { eq, and, sql, inArray, isNull, lt, or, desc } from 'drizzle-orm';
-import { parseHtml } from '@/lib/crawler/parser';
 import { checkRobotsTxt, normalizeUrl, isValidUrl, shouldCrawl } from '@/lib/crawler/robots';
 import { waitForRateLimit } from '@/lib/crawler/rate-limiter';
 
@@ -104,7 +103,8 @@ async function processUrl(queueItem: typeof crawlQueue.$inferSelect): Promise<vo
     });
 
     const html = await response.text();
-    const parsed = parseHtml(html, url);
+    const { parseHtml: parseHtmlFn } = await import('@/lib/crawler/parser');
+    const parsed = parseHtmlFn(html, url);
 
     const pageCount = await db
       .select({ count: sql<number>`count(*)` })
@@ -372,14 +372,19 @@ export async function getCrawlStats(): Promise<{
   };
 }
 
-if (process.argv[1] && (process.argv[1] === fileURLToPath(import.meta.url) || process.argv[1].endsWith('crawler.ts'))) {
-  const defaultSeeds = process.env.CRAWLER_SEED_URLS
-    ? process.env.CRAWLER_SEED_URLS.split(',')
-    : [
-        'https://developer.mozilla.org/en-US/docs/Web',
-        'https://en.wikipedia.org/wiki/Search_engine',
-        'https://nodejs.org/en/learn',
-      ];
+try {
+  if (typeof process !== 'undefined' && process.argv && process.argv[1] &&
+      (process.argv[1] === fileURLToPath(import.meta.url) || process.argv[1].endsWith('crawler.ts'))) {
+    const defaultSeeds = process.env.CRAWLER_SEED_URLS
+      ? process.env.CRAWLER_SEED_URLS.split(',')
+      : [
+          'https://developer.mozilla.org/en-US/docs/Web',
+          'https://en.wikipedia.org/wiki/Search_engine',
+          'https://nodejs.org/en/learn',
+        ];
 
-  addSeedUrls(defaultSeeds).then(() => startCrawler()).catch(console.error);
+    addSeedUrls(defaultSeeds).then(() => startCrawler()).catch(console.error);
+  }
+} catch {
+  // CLI auto-start not supported in this environment
 }
