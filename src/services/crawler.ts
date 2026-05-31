@@ -285,9 +285,12 @@ export async function startCrawler(): Promise<void> {
   await crawlLoop();
 }
 
+const SAFE_BATCH_MAX = 5;
+
 export async function processBatch(batchSize = CONCURRENCY): Promise<{ processed: number; completed: number; failed: number }> {
-  const batch = await getNextBatch(batchSize);
-  const limited = batch.slice(0, batchSize);
+  const size = Math.min(batchSize, SAFE_BATCH_MAX);
+  const batch = await getNextBatch(size);
+  const limited = batch.slice(0, size);
   if (limited.length === 0) return { processed: 0, completed: 0, failed: 0 };
 
   for (const item of limited) {
