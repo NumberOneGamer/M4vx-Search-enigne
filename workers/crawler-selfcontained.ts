@@ -110,12 +110,19 @@ async function processUrl(row, env) {
     }
     await sql("UPDATE crawl_queue SET status='completed',completed_at=NOW() WHERE id=$1",[id], env);
     if (depth < 2) {
-      const existing = new Set((await sql("SELECT url FROM crawl_queue WHERE url=ANY($1)",[parsed.internalLinks.slice(0,100)],env)).map(r=>r.url));
-      const existingPages = new Set((await sql("SELECT url FROM pages WHERE url=ANY($1)",[parsed.internalLinks.slice(0,100)],env)).map(r=>r.url));
-      for (const link of parsed.internalLinks.slice(0,20)) {
-        if (!existing.has(link) && !existingPages.has(link)) {
-          await sql("INSERT INTO crawl_queue (domain_id,url,priority,depth,status) VALUES($1,$2,5,$3,'pending') ON CONFLICT (url) DO NOTHING",[domain_id,link,depth+1], env);
+      const allLinks = [...parsed.internalLinks, ...parsed.externalLinks];
+      const exist = new Set((await sql("SELECT url FROM crawl_queue WHERE url=ANY($1)",[allLinks.slice(0,200)],env)).map(r=>r.url));
+      const existPg = new Set((await sql("SELECT url FROM pages WHERE url=ANY($1)",[allLinks.slice(0,200)],env)).map(r=>r.url));
+      for (const link of allLinks.slice(0,30)) {
+        if (!exist.has(link) && !existPg.has(link)) {
+          const isExternal = parsed.externalLinks.includes(link);
+          const linkDomain = new URL(link).hostname;
+          let [dom] = await sql("SELECT id FROM domains WHERE name=$1",[linkDomain],env);
+          if (!dom) { const dr = await sql("INSERT INTO domains (name) VALUES($1) RETURNING id",[linkDomain],env); dom = dr[0]; }
+          await sql("INSERT INTO crawl_queue (domain_id,url,priority,depth,status) VALUES($1,$2,$3,$4,'pending') ON CONFLICT (url) DO NOTHING",[dom.id,link,isExternal?1:5,depth+1], env);
         }
+      }
+    }
       }
     }
   } catch (e) {
