@@ -105,7 +105,7 @@ export default function CrawlManagerPage() {
                 addToast({ type: 'success', title: 'Crawl complete', description: `Processed ${data.processed} URLs (${data.completed} ok, ${data.failed} failed)` });
                 if (data.stats) setStats(data.stats);
               } else {
-                addToast({ type: 'error', title: 'Crawl failed', description: data.message });
+                addToast({ type: 'error', title: 'Crawl failed', description: data.detail || data.message });
               }
             } catch {
               addToast({ type: 'error', title: 'Crawl failed', description: 'Could not reach server' });
