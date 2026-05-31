@@ -2,13 +2,14 @@
 
 import { useState, FormEvent } from 'react';
 import { motion } from 'framer-motion';
-import { Loader2, Plus, Globe, RefreshCw } from 'lucide-react';
+import { Loader2, Plus, Globe, RefreshCw, Play, Terminal } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 
 export default function CrawlManagerPage() {
   const [urls, setUrls] = useState('');
   const [depth, setDepth] = useState(2);
   const [loading, setLoading] = useState(false);
+  const [running, setRunning] = useState(false);
   const [stats, setStats] = useState<{ queueSize: number; completed: number; failed: number } | null>(null);
   const { addToast } = useToast();
 
@@ -80,14 +81,55 @@ export default function CrawlManagerPage() {
         </div>
       )}
 
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-card border border-border rounded-xl p-5 mb-6 shadow-card"
+      >
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
+            <Terminal className="h-5 w-5 text-foreground" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Run Crawler Now</h2>
+            <p className="text-sm text-muted-foreground">Process pending URLs on the server (batch of 5)</p>
+          </div>
+        </div>
+        <button
+          onClick={async () => {
+            setRunning(true);
+            try {
+              const res = await fetch('/api/admin/crawler/run', { method: 'POST' });
+              const data = await res.json();
+              if (res.ok) {
+                addToast({ type: 'success', title: 'Crawl complete', description: `Processed ${data.processed} URLs (${data.completed} ok, ${data.failed} failed)` });
+                if (data.stats) setStats(data.stats);
+              } else {
+                addToast({ type: 'error', title: 'Crawl failed', description: data.message });
+              }
+            } catch {
+              addToast({ type: 'error', title: 'Crawl failed', description: 'Could not reach server' });
+            } finally {
+              setRunning(false);
+            }
+          }}
+          disabled={running}
+          className="flex items-center gap-2 px-5 py-2.5 bg-foreground text-background rounded-xl font-medium
+            hover:opacity-90 disabled:opacity-50 transition-all text-sm"
+        >
+          {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          {running ? 'Crawling...' : 'Run Crawler Now'}
+        </button>
+      </motion.div>
+
       <div className="bg-card border border-border rounded-xl p-6 max-w-2xl shadow-card">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
             <Globe className="h-5 w-5 text-foreground" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Start New Crawl</h2>
-            <p className="text-sm text-muted-foreground">Enter seed URLs and configure crawl depth</p>
+            <h2 className="text-lg font-semibold text-foreground">Queue Seed URLs</h2>
+            <p className="text-sm text-muted-foreground">Add URLs to the crawl queue for processing</p>
           </div>
         </div>
 
@@ -126,7 +168,7 @@ export default function CrawlManagerPage() {
               hover:opacity-90 disabled:opacity-50 transition-all text-sm"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            {loading ? 'Adding to queue...' : 'Start Crawling'}
+            {loading ? 'Adding to queue...' : 'Add to Queue'}
           </button>
         </form>
       </div>

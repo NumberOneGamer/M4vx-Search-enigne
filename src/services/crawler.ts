@@ -285,6 +285,18 @@ export async function startCrawler(): Promise<void> {
   await crawlLoop();
 }
 
+export async function processBatch(batchSize = CONCURRENCY): Promise<{ processed: number; completed: number; failed: number }> {
+  const batch = await getNextBatch();
+  const limited = batch.slice(0, batchSize);
+  if (limited.length === 0) return { processed: 0, completed: 0, failed: 0 };
+
+  const results = await Promise.allSettled(limited.map(processUrl));
+  const completed = results.filter((r) => r.status === 'fulfilled').length;
+  const failed = results.filter((r) => r.status === 'rejected').length;
+
+  return { processed: limited.length, completed, failed };
+}
+
 export async function addSeedUrls(urls: string[], depth = 2): Promise<void> {
   for (const url of urls) {
     if (!isValidUrl(url)) {
