@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, type FormEvent } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -89,10 +90,10 @@ export function SearchBar({ query, onChange, onSubmit, showSuggestions, large }:
             }}
             onKeyDown={handleKeyDown}
             placeholder="Search the web..."
-            className={`w-full pl-12 pr-12 bg-background border border-input rounded-full
+            className={`w-full pl-12 pr-12 bg-card border border-border rounded-full
               focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
               ${large ? 'text-lg h-14' : 'text-base h-12'}
-              shadow-sm hover:shadow-md transition-shadow`}
+              shadow-sm hover:shadow-md transition-all duration-200`}
           />
           {query && (
             <button
@@ -101,7 +102,7 @@ export function SearchBar({ query, onChange, onSubmit, showSuggestions, large }:
                 onChange('');
                 inputRef.current?.focus();
               }}
-              className="absolute right-4 p-1 rounded-full hover:bg-accent"
+              className="absolute right-4 p-1 rounded-full hover:bg-accent transition-colors"
             >
               <X className="h-4 w-4 text-muted-foreground" />
             </button>
@@ -109,28 +110,34 @@ export function SearchBar({ query, onChange, onSubmit, showSuggestions, large }:
         </div>
       </form>
 
-      {showSuggestions && showDropdown && suggestions.length > 0 && (
-        <div
-          ref={dropdownRef}
-          className="absolute z-50 w-full mt-1 bg-background border border-border rounded-xl shadow-lg overflow-hidden"
-        >
-          {suggestions.map((suggestion, i) => (
-            <button
-              key={suggestion}
-              onClick={() => {
-                router.push(`/search?q=${encodeURIComponent(suggestion)}`);
-                setShowDropdown(false);
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left
-                hover:bg-accent transition-colors
-                ${i === selectedIndex ? 'bg-accent' : ''}`}
-            >
-              <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <span className="truncate">{suggestion}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      <AnimatePresence>
+        {showSuggestions && showDropdown && suggestions.length > 0 && (
+          <motion.div
+            ref={dropdownRef}
+            initial={{ opacity: 0, y: -8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            transition={{ duration: 0.15 }}
+            className="absolute z-50 w-full mt-2 bg-card border border-border rounded-xl shadow-modal overflow-hidden"
+          >
+            {suggestions.map((suggestion, i) => (
+              <button
+                key={suggestion}
+                onClick={() => {
+                  router.push(`/search?q=${encodeURIComponent(suggestion)}`);
+                  setShowDropdown(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-left
+                  transition-colors
+                  ${i === selectedIndex ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}
+              >
+                <Search className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{suggestion}</span>
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

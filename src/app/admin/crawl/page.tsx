@@ -1,18 +1,29 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
-import { Loader2, Plus, Globe } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Loader2, Plus, Globe, RefreshCw } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 
 export default function CrawlManagerPage() {
   const [urls, setUrls] = useState('');
   const [depth, setDepth] = useState(2);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [stats, setStats] = useState<{ queueSize: number; completed: number; failed: number } | null>(null);
+  const { addToast } = useToast();
+
+  const fetchStats = async () => {
+    try {
+      const res = await fetch('/api/admin/crawl');
+      if (res.ok) setStats(await res.json());
+    } catch {}
+  };
+
+  useState(() => { fetchStats(); });
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setMessage(null);
 
     const urlList = urls.split('\n').map((u) => u.trim()).filter(Boolean);
 
@@ -25,13 +36,14 @@ export default function CrawlManagerPage() {
 
       const data = await res.json();
       if (res.ok) {
-        setMessage({ type: 'success', text: `Added ${data.count} URLs to crawl queue` });
+        addToast({ type: 'success', title: 'Crawl started', description: `Added ${data.count} URLs to the crawl queue` });
         setUrls('');
+        fetchStats();
       } else {
-        setMessage({ type: 'error', text: data.message || 'Failed to start crawl' });
+        addToast({ type: 'error', title: 'Failed to start crawl', description: data.message });
       }
     } catch {
-      setMessage({ type: 'error', text: 'Failed to start crawl' });
+      addToast({ type: 'error', title: 'Failed to start crawl' });
     } finally {
       setLoading(false);
     }
@@ -39,46 +51,68 @@ export default function CrawlManagerPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Crawl Manager</h1>
-
-      <div className="bg-card border rounded-xl p-6 max-w-2xl">
-        <div className="flex items-center gap-2 mb-4">
-          <Globe className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">Start New Crawl</h2>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">Crawl Manager</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">Add seed URLs to start crawling</p>
         </div>
+        <button
+          onClick={fetchStats}
+          className="p-2 rounded-xl hover:bg-accent transition-colors border border-border"
+          title="Refresh stats"
+        >
+          <RefreshCw className="h-4 w-4 text-muted-foreground" />
+        </button>
+      </div>
 
-        {message && (
-          <div className={`text-sm p-3 rounded-lg mb-4 ${
-            message.type === 'success'
-              ? 'bg-green-500/10 text-green-600'
-              : 'bg-destructive/10 text-destructive'
-          }`}>
-            {message.text}
+      {stats && (
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          {[
+            { label: 'Queue Size', value: stats.queueSize },
+            { label: 'Completed', value: stats.completed },
+            { label: 'Failed', value: stats.failed },
+          ].map((s) => (
+            <div key={s.label} className="bg-card border border-border rounded-xl p-4 text-center">
+              <p className="text-xl font-bold text-foreground">{s.value}</p>
+              <p className="text-xs text-muted-foreground">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="bg-card border border-border rounded-xl p-6 max-w-2xl shadow-card">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center">
+            <Globe className="h-5 w-5 text-foreground" />
           </div>
-        )}
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Start New Crawl</h2>
+            <p className="text-sm text-muted-foreground">Enter seed URLs and configure crawl depth</p>
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1.5">
-              Seed URLs (one per line)
+            <label className="block text-sm font-medium text-foreground mb-1.5">
+              Seed URLs <span className="text-muted-foreground">(one per line)</span>
             </label>
             <textarea
               value={urls}
               onChange={(e) => setUrls(e.target.value)}
               rows={5}
-              className="w-full px-3 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full px-3 py-2.5 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-ring transition-all text-sm hover:border-muted-foreground/30"
               placeholder="https://example.com&#10;https://example.org"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1.5">
+            <label className="block text-sm font-medium text-foreground mb-1.5">
               Crawl Depth
             </label>
             <select
               value={depth}
               onChange={(e) => setDepth(Number(e.target.value))}
-              className="w-full px-3 py-2 border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full px-3 py-2.5 bg-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-ring transition-all text-sm hover:border-muted-foreground/30"
             >
               {[1, 2, 3, 4, 5].map((d) => (
                 <option key={d} value={d}>{d} {d === 1 ? 'level' : 'levels'}</option>
@@ -88,10 +122,11 @@ export default function CrawlManagerPage() {
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2.5 bg-foreground text-background rounded-xl font-medium
+              hover:opacity-90 disabled:opacity-50 transition-all text-sm"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Start Crawling
+            {loading ? 'Adding to queue...' : 'Start Crawling'}
           </button>
         </form>
       </div>

@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { SearchBar } from '@/components/search/search-bar';
 import Link from 'next/link';
@@ -18,58 +19,85 @@ export default function HomePage() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <header className="flex justify-between items-center p-4">
+    <div className="flex flex-col min-h-screen bg-background">
+      <header className="flex justify-between items-center p-4 md:p-6">
         <div className="w-10" />
         <div className="flex items-center gap-4">
-          <Link href="/auth/login" className="text-sm text-muted-foreground hover:text-foreground">
-            Sign in
-          </Link>
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Link
+              href="/auth/login"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors px-4 py-2 rounded-lg hover:bg-accent"
+            >
+              Sign in
+            </Link>
+          </motion.div>
           <ThemeToggle />
         </div>
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center px-4 -mt-20">
-        <h1 className="text-5xl font-bold mb-2 tracking-tight">
-          <span className="text-primary">M4vx</span> Search
-        </h1>
-        <p className="text-muted-foreground mb-8 text-lg">
-          Fast, private, modern web search
-        </p>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: 'easeOut' }}
+          className="text-center"
+        >
+          <h1 className="text-6xl md:text-7xl font-bold mb-3 tracking-tight">
+            <span className="text-gradient">M4vx</span>{' '}
+            <span className="text-foreground">Search</span>
+          </h1>
+          <p className="text-muted-foreground mb-10 text-lg md:text-xl">
+            Fast, private, modern web search
+          </p>
+        </motion.div>
 
-        <div className="w-full max-w-2xl">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.15, ease: 'easeOut' }}
+          className="w-full max-w-2xl"
+        >
           <SearchBar
             query={query}
             onChange={setQuery}
             onSubmit={handleSearch}
             showSuggestions
           />
-        </div>
+        </motion.div>
 
-        <div className="mt-8 flex gap-2 text-sm text-muted-foreground">
-          <span>Try:</span>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3, ease: 'easeOut' }}
+          className="mt-10 flex flex-wrap items-center justify-center gap-3 text-sm"
+        >
+          <span className="text-muted-foreground">Try:</span>
           <button
             onClick={() => router.push('/search?q=next.js+documentation')}
-            className="hover:text-primary underline underline-offset-2"
+            className="px-3 py-1.5 rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent hover:border-border transition-all"
           >
             next.js documentation
           </button>
           <button
             onClick={() => router.push('/search?q=typescript+tutorial')}
-            className="hover:text-primary underline underline-offset-2"
+            className="px-3 py-1.5 rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent hover:border-border transition-all"
           >
             typescript tutorial
           </button>
           <button
             onClick={() => router.push('/search?q=react+server+components')}
-            className="hover:text-primary underline underline-offset-2"
+            className="px-3 py-1.5 rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent hover:border-border transition-all"
           >
             react server components
           </button>
-        </div>
+        </motion.div>
       </main>
 
-      <footer className="p-4 text-center text-xs text-muted-foreground">
+      <footer className="p-6 text-center text-xs text-muted-foreground border-t border-border">
         <p>&copy; {new Date().getFullYear()} M4vx Search Engine. All rights reserved.</p>
       </footer>
     </div>

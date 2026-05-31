@@ -41,15 +41,16 @@ export function Pagination({ currentPage, totalPages, totalResults, pageSize }: 
   };
 
   return (
-    <div className="flex flex-col items-center gap-4 mt-8">
+    <div className="flex flex-col items-center gap-4 mt-10 mb-8">
       <p className="text-sm text-muted-foreground">
-        Results {startResult}–{endResult} of {totalResults.toLocaleString()}
+        Results <span className="text-foreground font-medium">{startResult}</span>–<span className="text-foreground font-medium">{endResult}</span> of{' '}
+        <span className="text-foreground font-medium">{totalResults.toLocaleString()}</span>
       </p>
       <div className="flex items-center gap-1">
         <button
           onClick={() => goToPage(currentPage - 1)}
           disabled={currentPage <= 1}
-          className="p-2 rounded-lg hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
+          className="p-2 rounded-lg hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
@@ -62,9 +63,9 @@ export function Pagination({ currentPage, totalPages, totalResults, pageSize }: 
             <button
               key={page}
               onClick={() => goToPage(page)}
-              className={`min-w-[2.25rem] h-9 rounded-lg text-sm font-medium transition-colors
+              className={`min-w-[2.25rem] h-9 rounded-lg text-sm font-medium transition-all duration-200
                 ${page === currentPage
-                  ? 'bg-primary text-primary-foreground'
+                  ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'hover:bg-accent text-muted-foreground hover:text-foreground'
                 }`}
             >
@@ -75,7 +76,7 @@ export function Pagination({ currentPage, totalPages, totalResults, pageSize }: 
         <button
           onClick={() => goToPage(currentPage + 1)}
           disabled={currentPage >= totalPages}
-          className="p-2 rounded-lg hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
+          className="p-2 rounded-lg hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
           <ChevronRight className="h-5 w-5" />
         </button>
