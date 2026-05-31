@@ -14,7 +14,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const batchSize = typeof body.batchSize === 'number' ? body.batchSize : 5;
+    const batchSize = typeof body.batchSize === 'number' ? body.batchSize : undefined;
 
     const result = await processBatch(batchSize);
     const stats = await getCrawlStats();
