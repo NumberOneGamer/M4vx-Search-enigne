@@ -72,10 +72,14 @@ async function addToQueue(domainId: number, url: string, depth: number, priority
 async function processUrl(queueItem: typeof crawlQueue.$inferSelect, extractLinks = true): Promise<void> {
   const { domainId, url, depth } = queueItem;
 
-  await db
-    .update(crawlQueue)
-    .set({ status: 'running', startedAt: new Date() })
-    .where(eq(crawlQueue.id, queueItem.id));
+  try {
+    await db
+      .update(crawlQueue)
+      .set({ status: 'running', startedAt: new Date() })
+      .where(eq(crawlQueue.id, queueItem.id));
+  } catch {
+    // Non-fatal if status update fails
+  }
 
   try {
     const domain = new URL(url).hostname;
@@ -205,40 +209,53 @@ async function processUrl(queueItem: typeof crawlQueue.$inferSelect, extractLink
       }
     }
 
-    await db
-      .update(crawlQueue)
-      .set({ status: 'completed', completedAt: new Date() })
-      .where(eq(crawlQueue.id, queueItem.id));
+    try {
+      await db
+        .update(crawlQueue)
+        .set({ status: 'completed', completedAt: new Date() })
+        .where(eq(crawlQueue.id, queueItem.id));
 
-    await db
-      .update(domains)
-      .set({ lastCrawledAt: new Date() })
-      .where(eq(domains.id, domainId));
+      await db
+        .update(domains)
+        .set({ lastCrawledAt: new Date() })
+        .where(eq(domains.id, domainId));
+    } catch {} // Non-fatal if final status update fails
 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     const attempts = queueItem.attempts + 1;
 
-    if (attempts >= queueItem.maxAttempts) {
-      await db
-        .update(crawlQueue)
-        .set({
-          status: 'failed',
-          errorMessage: message,
-          attempts,
-          completedAt: new Date(),
-        })
-        .where(eq(crawlQueue.id, queueItem.id));
-    } else {
-      await db
-        .update(crawlQueue)
-        .set({
-          status: 'pending',
-          errorMessage: message,
-          attempts,
-          scheduledAt: new Date(Date.now() + Math.pow(2, attempts) * 60000),
-        })
-        .where(eq(crawlQueue.id, queueItem.id));
+    try {
+      if (attempts >= queueItem.maxAttempts) {
+        await db
+          .update(crawlQueue)
+          .set({
+            status: 'failed',
+            errorMessage: message,
+            attempts,
+            completedAt: new Date(),
+          })
+          .where(eq(crawlQueue.id, queueItem.id));
+      } else {
+        await db
+          .update(crawlQueue)
+          .set({
+            status: 'pending',
+            errorMessage: message,
+            attempts,
+            scheduledAt: new Date(Date.now() + Math.pow(2, attempts) * 60000),
+          })
+          .where(eq(crawlQueue.id, queueItem.id));
+      }
+    } catch {
+      // If the error recovery itself fails (e.g., subrequest limit),
+      // force the item back to pending so it can be retried later
+      try {
+        await db
+          .update(crawlQueue)
+          .set({ status: 'pending' })
+          .where(eq(crawlQueue.id, queueItem.id));
+      } catch {}
     }
   }
 }
