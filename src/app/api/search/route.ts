@@ -11,6 +11,23 @@ import { cacheGet, cacheSet, CACHE_TTL } from '@/lib/cache';
 import { generateSessionId } from '@/lib/utils';
 import type { SearchResponse, SearchResult } from '@/types';
 
+function extractSnippet(content: string, query: string, maxLen = 200): string {
+  if (!content) return '';
+  const terms = query.split(/\s+/).filter(Boolean);
+  if (!terms.length) return content.slice(0, maxLen);
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = terms.map(t => `(${esc(t)})`).join('|');
+  const re = new RegExp(pattern, 'gi');
+  const match = re.exec(content);
+  if (!match) return content.slice(0, maxLen);
+  const start = Math.max(0, match.index - 80);
+  const end = Math.min(content.length, match.index + match[0].length + 120);
+  let snippet = content.slice(start, end);
+  if (start > 0) snippet = '...' + snippet;
+  if (end < content.length) snippet = snippet + '...';
+  return snippet;
+}
+
 export async function GET(request: Request) {
   const startTime = Date.now();
   const { searchParams } = new URL(request.url);
@@ -89,7 +106,7 @@ export async function GET(request: Request) {
       id: r.id,
       title: r.title || 'Untitled',
       url: r.url,
-      description: r.description || (r.content ? r.content.slice(0, 300) : ''),
+      description: extractSnippet(r.content || '', q) || r.description || '',
       highlightedKeywords: q.split(/\s+/),
       domain: domainMap.get(r.domainId) || '',
       lastCrawledAt: r.crawledAt?.toISOString() || null,
