@@ -3,8 +3,9 @@ import { db } from '@/db';
 import { newsPublishers } from '@/db/schema/newsPublishers';
 import { eq } from 'drizzle-orm';
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
-  const id = parseInt(params.id, 10);
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id: paramId } = await params;
+  const id = parseInt(paramId, 10);
   if (isNaN(id)) {
     return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
   }
@@ -36,8 +37,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
-  const id = parseInt(params.id, 10);
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id: paramId } = await params;
+  const id = parseInt(paramId, 10);
   if (isNaN(id)) {
     return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
   }
