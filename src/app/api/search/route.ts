@@ -10,6 +10,7 @@ import { getSuggestions, getRelatedSearches, recordSearchTerm } from '@/lib/sear
 import { cacheGet, cacheSet, CACHE_TTL } from '@/lib/cache';
 import { generateSessionId } from '@/lib/utils';
 import { parseQuery, buildDateCondition } from '@/lib/search/query-parser';
+import { tokenizeQuery, calculateTfIdf } from '@/lib/search/tokenizer';
 import type { SearchResponse, SearchResult } from '@/types';
 
 const FTS_COL = sql`to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, ''))`;
@@ -93,6 +94,9 @@ export async function GET(request: Request) {
   const effectiveDateAfter = rawDateAfter || parsedQuery.dateAfter || dateCond.after;
   const effectiveDateBefore = rawDateBefore || parsedQuery.dateBefore || dateCond.before;
 
+  const { tokens: boolTokens, operators: boolOperators } = tokenizeQuery(effectiveQ);
+  const hasBooleanOps = boolOperators.length > 0;
+
   const cacheKey = `search:${effectiveQ}:${page}:${pageSize}:${type}:${sort}:${effectiveSite || ''}:${effectiveFileType || ''}:${effectiveDateAfter || ''}:${effectiveDateBefore || ''}`;
   const cached = await cacheGet<SearchResponse>(cacheKey);
   if (cached) return NextResponse.json(cached);
@@ -118,6 +122,8 @@ export async function GET(request: Request) {
 
     const scoreMap = new Map(rankedPages.map((rp) => [rp.pageId, rp.score]));
     const allKeywords = [...effectiveQ.split(/\s+/).filter(Boolean), ...effectiveExactPhrases];
+    const [totalDocCount] = await db.select({ count: sql<number>`count(*)` }).from(pages).where(sql`${pages.lastIndexedAt} IS NOT NULL`);
+    const totalDocs = Number(totalDocCount?.count || 1);
 
     type PageRow = { id: number; title: string | null; url: string; description: string | null; content: string | null; domainId: number; crawledAt: Date | null; contentType: string | null; wordCount: number | null; };
     let results: PageRow[] = [];
@@ -177,6 +183,29 @@ export async function GET(request: Request) {
       });
     }
 
+    if (hasBooleanOps && boolTokens.length > 0) {
+      const booleanFiltered = results.filter((r) => {
+        const text = ((r.content || '') + ' ' + (r.title || '')).toLowerCase();
+        let pass = true;
+        let opIdx = 0;
+        for (let i = 0; i < boolTokens.length; i++) {
+          const token = boolTokens[i].toLowerCase();
+          const nextOp = opIdx < boolOperators.length ? boolOperators[opIdx] : null;
+          const matches = text.includes(token);
+          if (nextOp === 'NOT') { if (matches) { pass = false; break; } opIdx++; }
+          else if (nextOp === 'AND') { if (!matches) { pass = false; break; } opIdx++; }
+          else if (nextOp === 'OR') { if (matches) { /* at least one OR match is enough */ } opIdx++; }
+          else { if (!matches && boolOperators.length === 0) { pass = false; break; } }
+        }
+        if (boolOperators.includes('OR')) {
+          const anyMatch = boolTokens.some((t) => text.includes(t.toLowerCase()));
+          pass = anyMatch;
+        }
+        return pass;
+      });
+      results = booleanFiltered;
+    }
+
     const domainIds = [...new Set(results.map((r) => r.domainId))];
     const [domainRecords, suggestions, relatedSearches] = await Promise.all([
       domainIds.length > 0
@@ -190,22 +219,36 @@ export async function GET(request: Request) {
     const aiSummary = results.length > 0 ? extractAiSummary(results, effectiveQ) : null;
     const relatedQuestions = results.length > 0 ? generateRelatedQuestions(effectiveQ) : [];
 
-    const searchResults: SearchResult[] = results.map((r, i) => ({
-      id: r.id,
-      title: r.title || 'Untitled',
-      url: r.url,
-      description: extractSnippet(r.content || '', effectiveQ, effectiveExactPhrases) || r.description || '',
-      highlightedKeywords: allKeywords,
-      domain: domainMap.get(r.domainId) || '',
-      lastCrawledAt: r.crawledAt?.toISOString() || null,
-      position: (page - 1) * pageSize + i + 1,
-      score: scoreMap.get(r.id) || 0,
-      contentType: r.contentType || undefined,
-      wordCount: r.wordCount || undefined,
-      favicon: domainMap.get(r.domainId)
-        ? `https://www.google.com/s2/favicons?domain=${domainMap.get(r.domainId)}&sz=32`
-        : undefined,
-    }));
+    const searchResults: SearchResult[] = results.map((r, i) => {
+      const rankScore = scoreMap.get(r.id) || 0;
+      const text = ((r.content || '') + ' ' + (r.title || '')).toLowerCase();
+      let tfidfScore = 0;
+      const queryTerms = effectiveQ.toLowerCase().split(/\s+/).filter(Boolean);
+      for (const term of queryTerms) {
+        const docFreq = text.split(term).length - 1;
+        if (docFreq > 0) {
+          tfidfScore += calculateTfIdf(docFreq, docFreq > 0 ? 1 : totalDocs > 1 ? Math.max(1, totalDocs / 10) : 1, totalDocs);
+        }
+      }
+      const combinedScore = rankScore + tfidfScore * 10;
+      return {
+        id: r.id,
+        title: r.title || 'Untitled',
+        url: r.url,
+        description: extractSnippet(r.content || '', effectiveQ, effectiveExactPhrases) || r.description || '',
+        highlightedKeywords: allKeywords,
+        domain: domainMap.get(r.domainId) || '',
+        lastCrawledAt: r.crawledAt?.toISOString() || null,
+        position: (page - 1) * pageSize + i + 1,
+        score: combinedScore,
+        contentType: r.contentType || undefined,
+        wordCount: r.wordCount || undefined,
+        language: undefined,
+        favicon: domainMap.get(r.domainId)
+          ? `https://www.google.com/s2/favicons?domain=${domainMap.get(r.domainId)}&sz=32`
+          : undefined,
+      };
+    });
 
     const responseTimeMs = Date.now() - startTime;
 

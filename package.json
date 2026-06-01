@@ -16,6 +16,10 @@
     "crawler": "tsx --env-file=.env src/services/crawler.ts",
     "indexer": "tsx --env-file=.env src/services/indexer.ts",
     "ranker": "tsx --env-file=.env src/services/ranker.ts",
+    "extract:news": "tsx --env-file=.env src/services/content-extractor.ts news",
+    "extract:images": "tsx --env-file=.env src/services/content-extractor.ts images",
+    "extract:videos": "tsx --env-file=.env src/services/content-extractor.ts videos",
+    "extract:all": "tsx --env-file=.env src/services/content-extractor.ts all",
     "create-admin": "tsx --env-file=.env scripts/create-admin.mts",
     "deploy:crawler": "npx wrangler deploy --config wrangler.crawler.toml"
   },

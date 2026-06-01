@@ -6,6 +6,7 @@ import { eq, sql, and, desc, isNull } from 'drizzle-orm';
 import { tokenizeAndStem, extractKeywords } from '@/lib/search/tokenizer';
 import { calculateSearchRelevance, calculatePageRankingScore } from '@/lib/search/ranking';
 import { DEFAULT_RANKING_FACTORS } from '@/types';
+import { extractContentFromPage } from './content-extractor';
 
 async function getUnindexedPages(limit = 10): Promise<typeof pages.$inferSelect[]> {
   return db
@@ -82,6 +83,8 @@ async function indexPage(page: typeof pages.$inferSelect): Promise<void> {
     .update(pages)
     .set({ lastIndexedAt: new Date() })
     .where(eq(pages.id, page.id));
+
+  extractContentFromPage(page.id).catch(() => {});
 }
 
 export async function reindexPage(pageId: number): Promise<void> {

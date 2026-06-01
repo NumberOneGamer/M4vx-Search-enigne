@@ -7,7 +7,7 @@ import Link from 'next/link';
 import {
   LayoutDashboard, Globe, List, BarChart3, Settings,
   Shield, LogOut, Menu, X, ChevronRight, HardDrive, Search,
-  Newspaper, Monitor, Database
+  Newspaper, Monitor, Database, TrendingUp
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,6 +20,7 @@ const navItems = [
   { href: '/admin/queue', label: 'Queue Monitor', icon: List },
   { href: '/admin/domains', label: 'Domains', icon: HardDrive },
   { href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
+  { href: '/admin/quality', label: 'Search Quality', icon: TrendingUp },
   { href: '/admin/monitoring', label: 'Monitoring', icon: Monitor },
   { href: '/admin/publishers', label: 'Publishers', icon: Newspaper },
   { href: '/admin/content', label: 'Content', icon: Database },
