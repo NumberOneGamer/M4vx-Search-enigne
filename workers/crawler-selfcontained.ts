@@ -97,6 +97,19 @@ async function processUrl(row, env) {
     } catch {}
 
     const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' }, signal: AbortSignal.timeout(10000) });
+
+    // ── Handle HTTP errors gracefully (don't crash the batch) ──
+    if (!res.ok) {
+      const attempts = (row.attempts||0) + 1;
+      const maxAttempts = parseInt(env.CRAWLER_MAX_ATTEMPTS || '3', 10);
+      if (attempts >= maxAttempts) {
+        await sql("UPDATE crawl_queue SET status='failed',error_message=$1,attempts=$2,completed_at=NOW() WHERE id=$3",[`HTTP ${res.status}: ${res.statusText}`, attempts, id], env);
+      } else {
+        await sql("UPDATE crawl_queue SET status='pending',error_message=$1,attempts=$2,scheduled_at=NOW()+($2||' minutes')::interval WHERE id=$3",[`HTTP ${res.status}: ${res.statusText}`, attempts, id], env);
+      }
+      return;
+    }
+
     const html = await res.text();
     const parsed = parseHtml(html, url);
 
@@ -126,7 +139,8 @@ async function processUrl(row, env) {
   } catch (e) {
     try {
       const attempts = (row.attempts||0)+1;
-      if (attempts >= 3) {
+      const maxAttempts = parseInt(env.CRAWLER_MAX_ATTEMPTS || '3', 10);
+      if (attempts >= maxAttempts) {
         await sql("UPDATE crawl_queue SET status='failed',error_message=$1,attempts=$2,completed_at=NOW() WHERE id=$3",[String(e),attempts,id], env);
       } else {
         await sql("UPDATE crawl_queue SET status='pending',error_message=$1,attempts=$2,scheduled_at=NOW()+($2||' minutes')::interval WHERE id=$3",[String(e),attempts,id], env);
@@ -140,11 +154,13 @@ export default {
     const url = new URL(request.url);
     if (url.searchParams.get('key') !== env.CRAWLER_SECRET) return new Response('Unauthorized', { status: 401 });
 
+    // ── Debug ──
     if (url.pathname === '/debug') {
       const parsed = env.DATABASE_URL.match(/postgres(?:ql)?:\/\/([^:]+):[^@]+@([^/]+)\/([^?]+)/);
       return new Response(JSON.stringify({ DATABASE_URL_set: !!env.DATABASE_URL, DATABASE_URL_prefix: env.DATABASE_URL ? env.DATABASE_URL.slice(0,20)+'...' : 'NOT SET', parsed_ok: !!parsed, user: parsed?.[1], host: parsed?.[2], database: parsed?.[3], CRAWLER_SECRET_set: !!env.CRAWLER_SECRET }), { headers: { 'Content-Type':'application/json' } });
     }
 
+    // ── Check a single URL ──
     if (url.pathname === '/check') {
       const u = url.searchParams.get('url');
       if (!u) return new Response(JSON.stringify({ error: 'missing ?url=' }), { status:400, headers:{'Content-Type':'application/json'} });
@@ -157,7 +173,9 @@ export default {
       } catch(e) { steps.push({ step:'parse-url', ok:false, error:String(e) }); }
       return new Response(JSON.stringify({ url: u, steps }), { headers:{'Content-Type':'application/json'} });
     }
-    if (url.pathname === '/add') {
+
+    // ── SEEDER: Add URLs to queue (cron-safe, no crawling) ──
+    if (url.pathname === '/seed' || url.pathname === '/add') {
       const urls = (url.searchParams.get('urls')||'').split(',').filter(Boolean);
       if (!urls.length) return new Response(JSON.stringify({error:'missing ?urls= comma-separated'}),{status:400,headers:{'Content-Type':'application/json'}});
       let added = 0;
@@ -173,28 +191,92 @@ export default {
             await sql("INSERT INTO crawl_queue (domain_id,url,priority,depth,status) VALUES($1,$2,10,0,'pending')",[dom.id,nu],env);
             added++;
           }
-        } catch(e) { /* skip invalid */ }
+        } catch(e) {}
       }
-      return new Response(JSON.stringify({ added, total: urls.length }),{headers:{'Content-Type':'application/json'}});
+      return new Response(JSON.stringify({ added, total: urls.length, mode: 'seeder' }),{headers:{'Content-Type':'application/json'}});
     }
+
+    // ── SEEDER: Enqueue from sitemap ──
+    if (url.pathname === '/seed-sitemap') {
+      const domain = url.searchParams.get('domain');
+      if (!domain) return new Response(JSON.stringify({error:'missing ?domain='}),{status:400,headers:{'Content-Type':'application/json'}});
+
+      // Simplified sitemap discovery (inline, no deps)
+      const commonPaths = ['/sitemap.xml','/sitemap_index.xml','/sitemap/','/sitemap-index.xml','/sitemaps/sitemap.xml'];
+      const base = domain.startsWith('http') ? domain.replace(/\/+$/, '') : `https://${domain}`;
+      const found = [];
+      for (const p of commonPaths) {
+        try {
+          const r = await fetch(`${base}${p}`, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(5000) });
+          if (r.ok) {
+            const xml = await r.text();
+            const locs = [...xml.matchAll(/<loc[^>]*>([^<]+)<\/loc>/gi)].map(m => m[1].trim());
+            found.push(...locs);
+          }
+        } catch {}
+      }
+
+      let added = 0;
+      const uniqueUrls = [...new Set(found)];
+      for (const u of uniqueUrls) {
+        try {
+          const nu = new URL(u).href.replace(/\/$/,'');
+          const domain = nu.match(/https?:\/\/([^\/]+)/)[1];
+          let [dom] = await sql("SELECT id FROM domains WHERE name=$1",[domain],env);
+          if (!dom) { const dr = await sql("INSERT INTO domains (name) VALUES($1) RETURNING id",[domain],env); dom = dr[0]; }
+          const [exist] = await sql("SELECT id FROM crawl_queue WHERE url=$1 AND status='pending'",[nu],env);
+          const [existPage] = await sql("SELECT id FROM pages WHERE url=$1",[nu],env);
+          if (!exist && !existPage) {
+            await sql("INSERT INTO crawl_queue (domain_id,url,priority,depth,status) VALUES($1,$2,5,0,'pending')",[dom.id,nu],env);
+            added++;
+          }
+        } catch {}
+      }
+      return new Response(JSON.stringify({ domain, discovered: uniqueUrls.length, added, mode: 'seeder' }),{headers:{'Content-Type':'application/json'}});
+    }
+
+    // ── Errors ──
     if (url.pathname === '/errors') {
       const r = await sql("SELECT DISTINCT error_message,COUNT(*) c FROM crawl_queue WHERE status='failed' GROUP BY error_message", [], env);
       return new Response(JSON.stringify({ errors: r }), { headers: { 'Content-Type':'application/json' } });
     }
+
+    // ── Reset blocked ──
     if (url.pathname === '/reset-blocked') {
       const before = Number((await sql("SELECT COUNT(*) c FROM crawl_queue WHERE status='failed' AND error_message ILIKE '%blocked%'",[],env))[0]?.c||0);
       await sql("UPDATE crawl_queue SET status='pending',attempts=0,error_message=NULL,scheduled_at=NULL,completed_at=NULL,started_at=NULL WHERE status='failed' AND error_message ILIKE '%blocked%'", [], env);
       return new Response(JSON.stringify({ reset: before }), { headers: { 'Content-Type':'application/json' } });
     }
 
+    // ── CONSUMER: Process batch from queue ──
     try {
       const batchSize = parseInt(url.searchParams.get('batch') || '20', 10);
-      try { await sql("UPDATE crawl_queue SET status='pending',started_at=NULL WHERE status='running' AND started_at < NOW()-INTERVAL '1 minute'", [], env); } catch {}
-      const rows = await sql("SELECT * FROM crawl_queue WHERE status='pending' AND (scheduled_at IS NULL OR scheduled_at<NOW()) ORDER BY priority DESC,RANDOM() LIMIT $1",[batchSize], env);
-      if (rows.length === 0) return new Response(JSON.stringify({ processed:0 }), { headers:{'Content-Type':'application/json'} });
-      for (const r of rows) await processUrl(r, env);
-      const stats = (await sql("SELECT (SELECT COUNT(*) FROM crawl_queue WHERE status='pending') AS queue_size,(SELECT COUNT(*) FROM crawl_queue WHERE status='completed') AS completed,(SELECT COUNT(*) FROM crawl_queue WHERE status='failed') AS failed",[],env))[0];
-      return new Response(JSON.stringify({ processed:rows.length, stats }), { headers:{'Content-Type':'application/json'} });
+      const maxPages = parseInt(env.CRAWLER_BATCH_MAX || '50', 10);
+      const actualBatch = Math.min(batchSize, maxPages);
+
+      try {
+        await sql("UPDATE crawl_queue SET status='pending',started_at=NULL WHERE status='running' AND started_at < NOW()-INTERVAL '1 minute'", [], env);
+      } catch {}
+
+      const rows = await sql("SELECT * FROM crawl_queue WHERE status='pending' AND (scheduled_at IS NULL OR scheduled_at<NOW()) ORDER BY priority DESC,RANDOM() LIMIT $1",[actualBatch], env);
+      if (!rows.length) return new Response(JSON.stringify({ processed:0 }), { headers:{'Content-Type':'application/json'} });
+
+      // Process each URL with individual error handling (one failure doesn't crash the batch)
+      let processed = 0, completed = 0, failed = 0;
+      for (const r of rows) {
+        try {
+          await processUrl(r, env);
+          processed++;
+          completed++;
+        } catch (e) {
+          processed++;
+          failed++;
+          console.error(`[Consumer] Failed to process ${r.url}:`, String(e));
+        }
+      }
+
+      const s = (await sql("SELECT (SELECT COUNT(*) FROM crawl_queue WHERE status='pending')q,(SELECT COUNT(*) FROM crawl_queue WHERE status='completed')c,(SELECT COUNT(*) FROM crawl_queue WHERE status='failed')f",[],env))[0];
+      return new Response(JSON.stringify({ processed, completed, failed, stats:{queue_size:Number(s.q),completed:Number(s.c),failed:Number(s.f)} }),{headers:{'Content-Type':'application/json'}});
     } catch (e) {
       return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { 'Content-Type':'application/json' } });
     }

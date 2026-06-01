@@ -3,5 +3,8 @@ main = "workers/crawler.ts"
 compatibility_date = "2026-05-30"
 compatibility_flags = ["nodejs_compat"]
 
+[triggers]
+crons = ["*/5 * * * *"]  # Every 5 min: seed URLs from sitemaps + process a small batch
+
 [vars]
 CRAWLER_BATCH_MAX = "50"

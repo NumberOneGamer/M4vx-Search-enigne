@@ -8,6 +8,7 @@ import { eq, and, sql, inArray, isNull, lt, or, desc } from 'drizzle-orm';
 import { parseHtml } from '@/lib/crawler/parser';
 import { checkRobotsTxt, normalizeUrl, isValidUrl, shouldCrawl } from '@/lib/crawler/robots';
 import { waitForRateLimit } from '@/lib/crawler/rate-limiter';
+import { discoverAndParseSitemaps } from '@/lib/crawler/sitemap';
 
 const USER_AGENT = process.env.CRAWLER_USER_AGENT || 'SearchEngineBot/1.0';
 const MAX_DEPTH = parseInt(process.env.CRAWLER_MAX_DEPTH || '3', 10);
@@ -69,7 +70,7 @@ async function addToQueue(domainId: number, url: string, depth: number, priority
     .onConflictDoNothing({ target: crawlQueue.url });
 }
 
-async function processUrl(queueItem: typeof crawlQueue.$inferSelect, extractLinks = true): Promise<void> {
+export async function processUrl(queueItem: typeof crawlQueue.$inferSelect, extractLinks = true): Promise<void> {
   const { domainId, url, depth } = queueItem;
 
   try {
@@ -359,6 +360,46 @@ export async function addSeedUrls(urls: string[], depth = 2): Promise<void> {
       console.log(`[Crawler] Added seed URL: ${normalizedUrl}`);
     }
   }
+}
+
+export async function enqueueFromSitemap(domain: string, priority = 5): Promise<number> {
+  const urls = await discoverAndParseSitemaps(domain);
+  let added = 0;
+
+  for (const url of urls) {
+    try {
+      const normalizedUrl = normalizeUrl(url);
+      const domainId = await getOrCreateDomain(normalizedUrl);
+
+      const [existingPage] = await db
+        .select()
+        .from(pages)
+        .where(eq(pages.url, normalizedUrl))
+        .limit(1);
+
+      const [existingQueue] = await db
+        .select()
+        .from(crawlQueue)
+        .where(and(eq(crawlQueue.url, normalizedUrl), eq(crawlQueue.status, 'pending')))
+        .limit(1);
+
+      if (!existingPage && !existingQueue) {
+        await db.insert(crawlQueue).values({
+          domainId,
+          url: normalizedUrl,
+          depth: 0,
+          priority,
+          status: 'pending',
+        });
+        added++;
+      }
+    } catch {
+      // skip individual invalid URLs from sitemap
+    }
+  }
+
+  console.log(`[Crawler] Enqueued ${added}/${urls.length} URLs from sitemap(s) for ${domain}`);
+  return added;
 }
 
 export async function getCrawlStats(): Promise<{

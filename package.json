@@ -14,6 +14,7 @@
     "db:migrate": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "crawler": "tsx --env-file=.env src/services/crawler.ts",
+    "consumer": "tsx --env-file=.env src/services/queue-consumer.ts",
     "indexer": "tsx --env-file=.env src/services/indexer.ts",
     "ranker": "tsx --env-file=.env src/services/ranker.ts",
     "extract:news": "tsx --env-file=.env src/services/content-extractor.ts news",
