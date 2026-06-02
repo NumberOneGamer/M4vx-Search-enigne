@@ -8,6 +8,28 @@ import { searchLogs } from '@/db/schema/searchLogs';
 import { eq, desc, count, gte, sql, avg } from 'drizzle-orm';
 import { cacheGet, cacheSet, CACHE_TTL } from '@/lib/cache';
 
+async function safeCount(table: any, condition?: any): Promise<number> {
+  try {
+    const q: any = db.select({ count: count() }).from(table);
+    if (condition) q.where(condition);
+    const r = await q;
+    return r[0]?.count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function safeAvg(table: any, column: any, condition?: any): Promise<number> {
+  try {
+    const q: any = db.select({ avg: avg(column) }).from(table);
+    if (condition) q.where(condition);
+    const r = await q;
+    return Math.round(Number(r[0]?.avg) || 0);
+  } catch {
+    return 0;
+  }
+}
+
 export async function GET() {
   try {
     const cacheKey = 'admin:monitoring:stats';
@@ -26,24 +48,20 @@ export async function GET() {
       avgResponseTime,
       searchCount7d,
     ] = await Promise.all([
-      db.select({ count: count() }).from(pages).then(r => r[0]?.count ?? 0),
-      db.select({ count: count() }).from(newsArticles).then(r => r[0]?.count ?? 0),
-      db.select({ count: count() }).from(videos).then(r => r[0]?.count ?? 0),
-      db.select({ count: count() }).from(images).then(r => r[0]?.count ?? 0),
-      db.select({ count: count() }).from(searchLogs).where(gte(searchLogs.createdAt, last24h)).then(r => r[0]?.count ?? 0),
-      db.select({ avg: avg(searchLogs.responseTimeMs) }).from(searchLogs).where(gte(searchLogs.createdAt, last24h)).then(r => Math.round(Number(r[0]?.avg) || 0)),
-      db.select({ count: count() }).from(searchLogs).where(gte(searchLogs.createdAt, last7d)).then(r => r[0]?.count ?? 0),
+      safeCount(pages),
+      safeCount(newsArticles),
+      safeCount(videos),
+      safeCount(images),
+      safeCount(searchLogs, gte(searchLogs.createdAt, last24h)),
+      safeAvg(searchLogs, searchLogs.responseTimeMs, gte(searchLogs.createdAt, last24h)),
+      safeCount(searchLogs, gte(searchLogs.createdAt, last7d)),
     ]);
-
-    const indexedNews = newsCount;
-    const indexedVideos = videoCount;
-    const indexedImages = imageCount;
 
     const stats = {
       totalIndexedPages: pageCount,
-      totalIndexedImages: indexedImages,
-      totalIndexedVideos: indexedVideos,
-      totalIndexedNews: indexedNews,
+      totalIndexedImages: imageCount,
+      totalIndexedVideos: videoCount,
+      totalIndexedNews: newsCount,
       totalCrawled: pageCount,
       searchesLast24h: searchCount24h,
       searchesLast7d: searchCount7d,
@@ -53,7 +71,7 @@ export async function GET() {
       lastUpdated: new Date().toISOString(),
     };
 
-    await cacheSet(cacheKey, stats, CACHE_TTL.ADMIN_STATS);
+    await cacheSet(cacheKey, stats, CACHE_TTL.ADMIN_STATS).catch(() => {});
     return NextResponse.json(stats);
   } catch (error) {
     console.error('Monitoring error:', error);

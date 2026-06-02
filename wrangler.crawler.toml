@@ -12,3 +12,4 @@ crons = ["*/2 * * * *"]
 [vars]
 CRAWLER_BATCH_MAX = "50"
 CRAWLER_SEED_URLS = "https://en.wikipedia.org/wiki/Search_engine"
+CRAWLER_SECRET = "pigga"
