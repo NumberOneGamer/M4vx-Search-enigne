@@ -55,7 +55,7 @@ export function sanitizeHtml(text: string): string {
 }
 
 export function highlightMatches(text: string, query: string | string[]): string {
-  const terms = Array.isArray(query) ? query : [query];
+  const terms = Array.isArray(query) ? query : query.split(/\s+/).filter(Boolean);
   const patterns = terms
     .filter(t => t.trim())
     .map(t => `(${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`);
