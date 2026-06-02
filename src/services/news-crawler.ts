@@ -1,7 +1,7 @@
 import { db } from '@/db';
 import { newsArticles } from '@/db/schema/newsArticles';
 import { newsPublishers } from '@/db/schema/newsPublishers';
-import { eq, and, desc, sql, isNull, inArray, gte, lte, count } from 'drizzle-orm';
+import { eq, and, desc, sql, isNull, inArray, gte, lte, count, ilike, or } from 'drizzle-orm';
 import { cacheGet, cacheSet, CACHE_TTL } from '@/lib/cache';
 
 export interface NewsSearchOptions {
@@ -46,6 +46,18 @@ export async function searchNews(options: NewsSearchOptions): Promise<NewsSearch
   const conditions: ReturnType<typeof eq>[] = [];
   conditions.push(eq(newsArticles.isIndexed, true));
 
+  const queryTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (queryTerms.length > 0) {
+    conditions.push(
+      or(
+        ...queryTerms.map(term => or(
+          ilike(newsArticles.headline, `%${term}%`),
+          ilike(newsArticles.description, `%${term}%`)
+        ))
+      ) as any
+    );
+  }
+
   if (category) {
     conditions.push(eq(newsArticles.category, category));
   }
@@ -67,8 +79,6 @@ export async function searchNews(options: NewsSearchOptions): Promise<NewsSearch
   }
 
   const whereClause = and(...conditions);
-
-  const queryTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
 
   let ordering = desc(newsArticles.publishDate);
   if (sort === 'relevance') {

@@ -1,6 +1,6 @@
 import { db } from '@/db';
 import { videos } from '@/db/schema/videos';
-import { eq, and, desc, gte, lte, count, inArray, sql } from 'drizzle-orm';
+import { eq, and, desc, gte, lte, count, inArray, sql, ilike, or } from 'drizzle-orm';
 import { cacheGet, cacheSet, CACHE_TTL } from '@/lib/cache';
 
 export interface VideoSearchOptions {
@@ -52,6 +52,18 @@ export async function searchVideos(options: VideoSearchOptions): Promise<VideoSe
 
   const conditions: ReturnType<typeof eq>[] = [];
   conditions.push(eq(videos.isIndexed, true));
+
+  const queryTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (queryTerms.length > 0) {
+    conditions.push(
+      or(
+        ...queryTerms.map(term => or(
+          ilike(videos.title, `%${term}%`),
+          ilike(videos.description, `%${term}%`)
+        ))
+      ) as any
+    );
+  }
 
   if (duration && DURATION_RANGES[duration]) {
     const [minDur, maxDur] = DURATION_RANGES[duration];
@@ -106,8 +118,6 @@ export async function searchVideos(options: VideoSearchOptions): Promise<VideoSe
     .orderBy(ordering)
     .limit(pageSize)
     .offset(offset);
-
-  const queryTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
 
   const results = rows.map((row) => {
     let score = row.viewCount ?? 0;

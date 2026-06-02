@@ -139,6 +139,11 @@ export function ImageResults({ results }: ImageResultsProps) {
                 <div className="absolute top-2 left-2 w-3 h-3 rounded-full border border-white/30 shadow-sm" style={{ backgroundColor: `#${image.dominantColor.replace('#', '')}` }} />
               )}
             </div>
+            {(image.altText || image.caption || image.pageTitle) && (
+              <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">
+                {image.caption || image.altText || image.pageTitle}
+              </p>
+            )}
           </div>
         ))}
       </div>

@@ -1,6 +1,6 @@
 import { db } from '@/db';
 import { images } from '@/db/schema/images';
-import { eq, and, desc, gte, lte, count, sql, or } from 'drizzle-orm';
+import { eq, and, desc, gte, lte, count, sql, or, ilike } from 'drizzle-orm';
 import { cacheGet, cacheSet, CACHE_TTL } from '@/lib/cache';
 
 export interface ImageSearchOptions {
@@ -55,6 +55,20 @@ export async function searchImages(options: ImageSearchOptions): Promise<ImageSe
   if (cached) return cached;
 
   const conditions: ReturnType<typeof eq>[] = [];
+
+  const queryTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (queryTerms.length > 0) {
+    conditions.push(
+      or(
+        ...queryTerms.map(term => or(
+          ilike(images.altText, `%${term}%`),
+          ilike(images.caption, `%${term}%`),
+          ilike(images.pageTitle, `%${term}%`),
+          ilike(images.contextContent, `%${term}%`)
+        ))
+      ) as any
+    );
+  }
 
   if (size && SIZE_RANGES[size]) {
     const range = SIZE_RANGES[size];
@@ -115,8 +129,6 @@ export async function searchImages(options: ImageSearchOptions): Promise<ImageSe
     .where(whereClause);
 
   const totalResults = totalResult?.count ?? 0;
-
-  const queryTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
 
   const rows = await db
     .select()
