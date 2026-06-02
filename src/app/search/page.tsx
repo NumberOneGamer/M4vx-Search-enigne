@@ -2,7 +2,7 @@
 
 import { useState, FormEvent, useEffect, Suspense, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { SearchBar } from '@/components/search/search-bar';
 import { SearchResults } from '@/components/search/search-results';
@@ -83,6 +83,9 @@ function SearchContent() {
   const [imageFilter, setImageFilter] = useState<ImageFilter>({});
   const [showFilters, setShowFilters] = useState(false);
   const [language, setLanguage] = useState('all');
+  const [webSite, setWebSite] = useState('');
+  const [webFileType, setWebFileType] = useState('');
+  const [webDatePreset, setWebDatePreset] = useState('');
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const prevQueryRef = useRef(query);
 
@@ -146,7 +149,7 @@ function SearchContent() {
     }
     prevQueryRef.current = query;
 
-    const fetchWeb = fetch(`/api/search?q=${encodeURIComponent(query)}&page=${page}&pageSize=${pageSize}${language !== 'all' ? `&language=${language}` : ''}`)
+    const fetchWeb = fetch(`/api/search?q=${encodeURIComponent(query)}&page=${page}&pageSize=${pageSize}${language !== 'all' ? `&language=${language}` : ''}${webSite ? `&site=${encodeURIComponent(webSite)}` : ''}${webFileType ? `&fileType=${webFileType}` : ''}${webDatePreset ? `&datePreset=${webDatePreset}` : ''}`)
       .then((res) => res.ok ? res.json() : null)
       .then((data) => setWebResults(data));
 
@@ -300,6 +303,146 @@ function SearchContent() {
           </div>
           </div>
       </header>
+
+      <AnimatePresence>
+        {showFilters && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="border-b border-border/50 bg-muted/30 overflow-hidden"
+          >
+            <div className="max-w-6xl mx-auto px-4 py-4 flex flex-wrap gap-4 items-end">
+              {(activeTab === 'all' || activeTab === 'web') && (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">Site</label>
+                    <input type="text" value={webSite} onChange={(e) => setWebSite(e.target.value)} placeholder="example.com" className="h-8 px-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:ring-1 focus:ring-ring w-40" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">File type</label>
+                    <select value={webFileType} onChange={(e) => setWebFileType(e.target.value)} className="h-8 px-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:ring-1 focus:ring-ring">
+                      <option value="">Any</option>
+                      <option value="pdf">PDF</option>
+                      <option value="doc">DOC</option>
+                      <option value="txt">TXT</option>
+                      <option value="html">HTML</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">Date</label>
+                    <select value={webDatePreset} onChange={(e) => setWebDatePreset(e.target.value)} className="h-8 px-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:ring-1 focus:ring-ring">
+                      <option value="">Any time</option>
+                      <option value="hour">Past hour</option>
+                      <option value="today">Past 24 hours</option>
+                      <option value="week">Past week</option>
+                      <option value="month">Past month</option>
+                      <option value="year">Past year</option>
+                    </select>
+                  </div>
+                </>
+              )}
+              {activeTab === 'news' && (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">Time frame</label>
+                    <select value={newsFilter.timeFrame || ''} onChange={(e) => setNewsFilter((p) => ({ ...p, timeFrame: e.target.value as any || undefined }))} className="h-8 px-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:ring-1 focus:ring-ring">
+                      <option value="">Any time</option>
+                      <option value="hour">Past hour</option>
+                      <option value="today">Past 24 hours</option>
+                      <option value="week">Past week</option>
+                      <option value="month">Past month</option>
+                      <option value="year">Past year</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">Category</label>
+                    <select value={newsFilter.category || ''} onChange={(e) => setNewsFilter((p) => ({ ...p, category: e.target.value as any || undefined }))} className="h-8 px-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:ring-1 focus:ring-ring">
+                      <option value="">All</option>
+                      <option value="technology">Technology</option>
+                      <option value="gaming">Gaming</option>
+                      <option value="business">Business</option>
+                      <option value="science">Science</option>
+                      <option value="sports">Sports</option>
+                      <option value="politics">Politics</option>
+                      <option value="entertainment">Entertainment</option>
+                    </select>
+                  </div>
+                </>
+              )}
+              {activeTab === 'videos' && (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">Duration</label>
+                    <select value={videoFilter.duration || ''} onChange={(e) => setVideoFilter((p) => ({ ...p, duration: e.target.value as any || undefined }))} className="h-8 px-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:ring-1 focus:ring-ring">
+                      <option value="">Any</option>
+                      <option value="short">Short (&lt;5 min)</option>
+                      <option value="medium">Medium (5-20 min)</option>
+                      <option value="long">Long (&gt;20 min)</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">Upload date</label>
+                    <select value={videoFilter.uploadDate || ''} onChange={(e) => setVideoFilter((p) => ({ ...p, uploadDate: e.target.value as any || undefined }))} className="h-8 px-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:ring-1 focus:ring-ring">
+                      <option value="">Any</option>
+                      <option value="today">Today</option>
+                      <option value="week">This week</option>
+                      <option value="month">This month</option>
+                      <option value="year">This year</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">Quality</label>
+                    <select value={videoFilter.quality || ''} onChange={(e) => setVideoFilter((p) => ({ ...p, quality: e.target.value as any || undefined }))} className="h-8 px-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:ring-1 focus:ring-ring">
+                      <option value="">Any</option>
+                      <option value="hd">HD</option>
+                      <option value="fullhd">Full HD</option>
+                      <option value="4k">4K</option>
+                    </select>
+                  </div>
+                </>
+              )}
+              {activeTab === 'images' && (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">Size</label>
+                    <select value={imageFilter.size || ''} onChange={(e) => setImageFilter((p) => ({ ...p, size: e.target.value as any || undefined }))} className="h-8 px-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:ring-1 focus:ring-ring">
+                      <option value="">Any</option>
+                      <option value="small">Small</option>
+                      <option value="medium">Medium</option>
+                      <option value="large">Large</option>
+                      <option value="ultrahd">Ultra HD</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">Orientation</label>
+                    <select value={imageFilter.orientation || ''} onChange={(e) => setImageFilter((p) => ({ ...p, orientation: e.target.value as any || undefined }))} className="h-8 px-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:ring-1 focus:ring-ring">
+                      <option value="">Any</option>
+                      <option value="landscape">Landscape</option>
+                      <option value="portrait">Portrait</option>
+                      <option value="square">Square</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">Color</label>
+                    <input type="text" value={imageFilter.color || ''} onChange={(e) => setImageFilter((p) => ({ ...p, color: e.target.value || undefined }))} placeholder="e.g. red, #ff0000" className="h-8 px-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:ring-1 focus:ring-ring w-32" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-muted-foreground">Type</label>
+                    <select value={imageFilter.type || ''} onChange={(e) => setImageFilter((p) => ({ ...p, type: e.target.value as any || undefined }))} className="h-8 px-2.5 text-sm bg-background border border-border rounded-lg outline-none focus:ring-1 focus:ring-ring">
+                      <option value="">Any</option>
+                      <option value="photo">Photo</option>
+                      <option value="illustration">Illustration</option>
+                      <option value="icon">Icon</option>
+                      <option value="gif">GIF</option>
+                    </select>
+                  </div>
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <main className="max-w-6xl mx-auto px-4 py-6" ref={imageContainerRef}>
         {loading ? (
