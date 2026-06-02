@@ -274,13 +274,16 @@ function SearchContent() {
               <ThemeToggle />
             </div>
           </div>
-          <div className="flex items-center gap-2 border-b border-border/50">
+          <div className="flex items-center gap-3 border-b border-border/50">
+            <div aria-hidden="true" className="text-lg font-bold shrink-0 tracking-tight invisible select-none">
+              <span className="text-gradient">M4vx</span>
+            </div>
             <SearchTabs activeTab={activeTab} onTabChange={handleTabChange} />
             <div className="flex items-center gap-1 ml-auto">
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-                className="text-xs bg-transparent border border-border rounded px-2 py-1 text-muted-foreground hover:text-foreground cursor-pointer outline-none"
+                className="text-xs bg-background border border-border rounded-lg px-2.5 py-1.5 text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer outline-none transition-colors"
               >
                 <option value="all">All langs</option>
                 <option value="en">English</option>

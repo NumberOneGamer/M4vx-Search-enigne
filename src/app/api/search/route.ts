@@ -97,7 +97,7 @@ export async function GET(request: Request) {
   const { tokens: boolTokens, operators: boolOperators } = tokenizeQuery(effectiveQ);
   const hasBooleanOps = boolOperators.length > 0;
 
-  const cacheKey = `search:${effectiveQ}:${page}:${pageSize}:${type}:${sort}:${effectiveSite || ''}:${effectiveFileType || ''}:${effectiveDateAfter || ''}:${effectiveDateBefore || ''}`;
+  const cacheKey = `search:${effectiveQ}:${page}:${pageSize}:${type}:${sort}:${effectiveSite || ''}:${effectiveFileType || ''}:${effectiveDateAfter || ''}:${effectiveDateBefore || ''}:${language || ''}`;
   const cached = await cacheGet<SearchResponse>(cacheKey);
   if (cached) return NextResponse.json(cached);
 

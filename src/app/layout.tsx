@@ -10,6 +10,7 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'M4vx Search - Fast, Private, Modern Web Search',
   description: 'A modern search engine with advanced ranking and indexing capabilities',
+  icons: [{ rel: 'icon', url: '/favicon.png' }],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
