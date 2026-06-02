@@ -20,6 +20,9 @@ function formatDuration(seconds: number | null): string {
 export function VideoPreviewModal({ video, onClose }: VideoPreviewModalProps) {
   const [embedError, setEmbedError] = useState(false);
   const highlightTerms: string[] = [];
+  const validEmbeds = ['/embed/', 'player.vimeo.com', 'dailymotion.com/embed'];
+  const isValidEmbed = video.embedUrl && validEmbeds.some(e => video.embedUrl!.includes(e));
+  const safeEmbedUrl: string | undefined = isValidEmbed ? video.embedUrl ?? undefined : undefined;
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -44,9 +47,9 @@ export function VideoPreviewModal({ video, onClose }: VideoPreviewModalProps) {
         </button>
 
         <div className="aspect-video bg-muted relative">
-          {video.embedUrl && !embedError ? (
+          {isValidEmbed && !embedError ? (
             <iframe
-              src={video.embedUrl}
+              src={safeEmbedUrl}
               className="w-full h-full"
               allow="autoplay; encrypted-media"
               allowFullScreen

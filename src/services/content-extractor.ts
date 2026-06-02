@@ -7,7 +7,7 @@ import { images } from '@/db/schema/images';
 import { eq, sql, and, isNull, isNotNull, desc } from 'drizzle-orm';
 
 const VIDEO_PLATFORMS = [
-  { host: 'youtube.com', extract: (url: string) => { const m = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/); return m ? `https://www.youtube-nocookie.com/embed/${m[1]}` : null; } },
+  { host: 'youtube.com', extract: (url: string) => { const m = url.match(/(?:v=|youtu\.be\/|\/shorts\/)([a-zA-Z0-9_-]{11})/); return m ? `https://www.youtube-nocookie.com/embed/${m[1]}` : null; } },
   { host: 'youtu.be', extract: (url: string) => { const m = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/); return m ? `https://www.youtube-nocookie.com/embed/${m[1]}` : null; } },
   { host: 'vimeo.com', extract: (url: string) => { const m = url.match(/vimeo\.com\/(\d+)/); return m ? `https://player.vimeo.com/video/${m[1]}` : null; } },
   { host: 'dailymotion.com', extract: (url: string) => { const m = url.match(/dailymotion\.com\/video\/([a-zA-Z0-9]+)/); return m ? `https://www.dailymotion.com/embed/video/${m[1]}` : null; } },
@@ -59,7 +59,8 @@ function extractVideosFromHtml(html: string | null, baseUrl: string): Array<{ ur
       const absUrl = new URL(src, baseUrl).href;
       const host = new URL(absUrl).hostname.replace('www.', '');
       const platform = VIDEO_PLATFORMS.find((p) => host.includes(p.host));
-      vids.push({ url: absUrl, title: null, embedUrl: platform?.extract(absUrl) || absUrl });
+      const embedUrl = platform?.extract(absUrl) || null;
+      if (embedUrl) vids.push({ url: embedUrl, title: null, embedUrl });
     } catch { continue; }
   }
 
@@ -71,9 +72,9 @@ function extractVideosFromHtml(html: string | null, baseUrl: string): Array<{ ur
       const host = new URL(absUrl).hostname.replace('www.', '');
       const platform = VIDEO_PLATFORMS.find((p) => host.includes(p.host));
       if (platform) {
-        const alreadyExists = vids.some((v) => v.url === absUrl);
-        if (!alreadyExists) {
-          vids.push({ url: absUrl, title: stripTags(m[2]) || null, embedUrl: platform.extract(absUrl) });
+        const embedUrl = platform.extract(absUrl);
+        if (embedUrl && !vids.some((v) => v.url === embedUrl)) {
+          vids.push({ url: embedUrl, title: stripTags(m[2]) || null, embedUrl });
         }
       }
     } catch { continue; }

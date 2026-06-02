@@ -1,6 +1,6 @@
 // @ts-nocheck
 const VIDEO_PLATFORMS = [
-  { host: 'youtube.com', extract: (url) => { const m = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/); return m ? `https://www.youtube-nocookie.com/embed/${m[1]}` : null; } },
+  { host: 'youtube.com', extract: (url) => { const m = url.match(/(?:v=|youtu\.be\/|\/shorts\/)([a-zA-Z0-9_-]{11})/); return m ? `https://www.youtube-nocookie.com/embed/${m[1]}` : null; } },
   { host: 'youtu.be', extract: (url) => { const m = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/); return m ? `https://www.youtube-nocookie.com/embed/${m[1]}` : null; } },
   { host: 'vimeo.com', extract: (url) => { const m = url.match(/vimeo\.com\/(\d+)/); return m ? `https://player.vimeo.com/video/${m[1]}` : null; } },
   { host: 'dailymotion.com', extract: (url) => { const m = url.match(/dailymotion\.com\/video\/([a-zA-Z0-9]+)/); return m ? `https://www.dailymotion.com/embed/video/${m[1]}` : null; } },
@@ -28,7 +28,8 @@ function extractVideos(html, baseUrl) {
       const absUrl = new URL(m[1], baseUrl).href;
       const host = new URL(absUrl).hostname.replace('www.', '');
       const platform = VIDEO_PLATFORMS.find(p => host.includes(p.host));
-      if (platform) vids.push({ url: absUrl, title: null, embedUrl: platform.extract(absUrl) || absUrl, source: platform.host });
+      const embedUrl = platform?.extract(absUrl);
+      if (embedUrl) vids.push({ url: embedUrl, title: null, embedUrl, source: platform.host });
     } catch {}
   }
   const linkRegex = /<a[^>]+href\s*=\s*"([^"]+)"[^>]*>(.*?)<\/a>/gi;
@@ -37,9 +38,12 @@ function extractVideos(html, baseUrl) {
       const absUrl = new URL(m[1], baseUrl).href;
       const host = new URL(absUrl).hostname.replace('www.', '');
       const platform = VIDEO_PLATFORMS.find(p => host.includes(p.host));
-      if (platform && !vids.some(v => v.url === absUrl)) {
-        const title = m[2].replace(/<[^>]*>/g, '').trim() || null;
-        vids.push({ url: absUrl, title, embedUrl: platform.extract(absUrl) || absUrl, source: platform.host });
+      if (platform) {
+        const embedUrl = platform.extract(absUrl);
+        if (embedUrl && !vids.some(v => v.url === embedUrl)) {
+          const title = m[2].replace(/<[^>]*>/g, '').trim() || null;
+          vids.push({ url: embedUrl, title, embedUrl, source: platform.host });
+        }
       }
     } catch {}
   }
@@ -60,7 +64,7 @@ async function processPage(page, env) {
       if (existing.has(v.url)) continue;
       const esc = s => s ? `'${s.replace(/'/g,"''")}'` : 'NULL';
       const title = v.title || page.title || 'Untitled';
-      const source = v.source || (v.url.includes('youtube') ? 'youtube' : v.url.includes('vimeo') ? 'vimeo' : 'other');
+      const source = v.url.includes('youtube-nocookie') ? 'youtube' : v.url.includes('vimeo') ? 'vimeo' : 'other';
       values.push(`(${esc(v.url)},${esc(title)},${esc(v.embedUrl)},${esc(source)},true,NOW())`);
     }
     for (let i = 0; i < values.length; i += 25) {
