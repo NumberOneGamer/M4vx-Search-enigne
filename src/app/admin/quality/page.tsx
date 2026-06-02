@@ -1,12 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BarChart3, Search, MousePointerClick, Clock, AlertTriangle, TrendingUp, Activity, XCircle } from 'lucide-react';
+import { BarChart3, Search, MousePointerClick, Clock, AlertTriangle, TrendingUp, Activity, XCircle, Globe, FileText, Film, Image } from 'lucide-react';
 
 interface QualityStats {
   totalSearches: number;
   searchesLast24h: number;
   searchesLast7d: number;
+  totalIndexedPages: number;
+  totalIndexedNews: number;
+  totalIndexedVideos: number;
+  totalIndexedImages: number;
   zeroResultSearches: number;
   zeroResultRate: number;
   totalClicks: number;
@@ -41,7 +45,7 @@ export default function QualityDashboardPage() {
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">Search Quality Dashboard</h1>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
+          {Array.from({ length: 12 }).map((_, i) => (
             <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />
           ))}
         </div>
@@ -53,7 +57,7 @@ export default function QualityDashboardPage() {
     return <div className="text-center py-12 text-muted-foreground">Failed to load quality stats</div>;
   }
 
-  const cards = [
+  const searchCards = [
     { label: 'Searches (24h)', value: stats.searchesLast24h.toLocaleString(), icon: Search, color: 'text-blue-500', bg: 'bg-blue-500/10' },
     { label: 'Searches (7d)', value: stats.searchesLast7d.toLocaleString(), icon: TrendingUp, color: 'text-cyan-500', bg: 'bg-cyan-500/10' },
     { label: 'CTR', value: `${stats.ctr}%`, icon: MousePointerClick, color: 'text-green-500', bg: 'bg-green-500/10' },
@@ -64,6 +68,13 @@ export default function QualityDashboardPage() {
     { label: 'Failed Searches', value: stats.failedSearches.toLocaleString(), icon: Activity, color: stats.failedSearches > 0 ? 'text-red-500' : 'text-green-500', bg: stats.failedSearches > 0 ? 'bg-red-500/10' : 'bg-green-500/10' },
   ];
 
+  const contentCards = [
+    { label: 'Indexed Pages', value: stats.totalIndexedPages.toLocaleString(), icon: Globe, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { label: 'Indexed News', value: stats.totalIndexedNews.toLocaleString(), icon: FileText, color: 'text-orange-500', bg: 'bg-orange-500/10' },
+    { label: 'Indexed Videos', value: stats.totalIndexedVideos.toLocaleString(), icon: Film, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+    { label: 'Indexed Images', value: stats.totalIndexedImages.toLocaleString(), icon: Image, color: 'text-green-500', bg: 'bg-green-500/10' },
+  ];
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -71,8 +82,27 @@ export default function QualityDashboardPage() {
         <button onClick={fetchStats} className="text-sm text-muted-foreground hover:text-foreground transition-colors">Refresh</button>
       </div>
 
+      <h2 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Indexed Content</h2>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        {cards.map((card) => {
+        {contentCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <div key={card.label} className="p-4 rounded-xl bg-muted/30 border border-border/40">
+              <div className="flex items-center justify-between mb-3">
+                <div className={`p-2 rounded-lg ${card.bg}`}>
+                  <Icon className={`w-5 h-5 ${card.color}`} />
+                </div>
+              </div>
+              <p className="text-2xl font-bold">{card.value}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{card.label}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      <h2 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Search Metrics</h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {searchCards.map((card) => {
           const Icon = card.icon;
           return (
             <div key={card.label} className="p-4 rounded-xl bg-muted/30 border border-border/40">

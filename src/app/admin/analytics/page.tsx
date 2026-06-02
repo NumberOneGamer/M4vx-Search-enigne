@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   BarChart3, Search, MousePointerClick, TrendingUp, Clock,
-  RefreshCw, AlertTriangle, Globe, Link, Download, Calendar
+  RefreshCw, AlertTriangle, Globe, Link, Download, Calendar,
+  FileText, Film, Image
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -27,6 +28,10 @@ interface Analytics {
   avgPositionClicked: number;
   mostClickedDomains: Array<{ domain: string; count: number }>;
   mostClickedResults: Array<{ url: string; count: number }>;
+  totalIndexedPages: number;
+  totalIndexedNews: number;
+  totalIndexedVideos: number;
+  totalIndexedImages: number;
 }
 
 export default function AnalyticsPage() {
@@ -138,6 +143,24 @@ export default function AnalyticsPage() {
             transition={{ delay: i * 0.03 }}
             className="bg-card border border-border rounded-xl p-5 hover:bg-accent/30 transition-all"
           >
+            <div className="w-9 h-9 rounded-lg bg-accent flex items-center justify-center mb-3">
+              <card.icon className="h-4 w-4 text-foreground" />
+            </div>
+            <p className="text-2xl font-bold text-foreground tracking-tight">{card.value}</p>
+            <p className="text-sm text-muted-foreground mt-0.5">{card.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      <h2 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Indexed Content</h2>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {[
+          { label: 'Web Pages', value: (data?.totalIndexedPages ?? 0).toLocaleString(), icon: Globe },
+          { label: 'News Articles', value: (data?.totalIndexedNews ?? 0).toLocaleString(), icon: FileText },
+          { label: 'Videos', value: (data?.totalIndexedVideos ?? 0).toLocaleString(), icon: Film },
+          { label: 'Images', value: (data?.totalIndexedImages ?? 0).toLocaleString(), icon: Image },
+        ].map((card, i) => (
+          <motion.div key={card.label} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.03 }} className="bg-card border border-border rounded-xl p-5 hover:bg-accent/30 transition-all">
             <div className="w-9 h-9 rounded-lg bg-accent flex items-center justify-center mb-3">
               <card.icon className="h-4 w-4 text-foreground" />
             </div>

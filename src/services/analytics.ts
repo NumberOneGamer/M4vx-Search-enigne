@@ -192,6 +192,10 @@ export async function getSearchAnalytics(
   avgPositionClicked: number;
   mostClickedDomains: Array<{ domain: string; count: number }>;
   mostClickedResults: Array<{ url: string; count: number }>;
+  totalIndexedPages: number;
+  totalIndexedNews: number;
+  totalIndexedVideos: number;
+  totalIndexedImages: number;
 }> {
   const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const toDate = to ? new Date(to) : new Date();
@@ -342,6 +346,11 @@ export async function getSearchAnalytics(
     .orderBy(desc(sql`count(*)`))
     .limit(10);
 
+  const [totalPages] = await db.select({ count: count() }).from(pages);
+  const [totalNews] = await db.select({ count: count() }).from(newsArticles);
+  const [totalVideos] = await db.select({ count: count() }).from(videos);
+  const [totalImages] = await db.select({ count: count() }).from(images);
+
   const totalSearches = Number(totalSearchesResult[0]?.count ?? 0);
   const totalClicks = Number(totalClicksResult[0]?.count ?? 0);
 
@@ -360,5 +369,9 @@ export async function getSearchAnalytics(
     avgPositionClicked: Math.round(Number(avgPositionResult?.avg || 0) * 100) / 100,
     mostClickedDomains: (mostClickedDomains as Array<{ domain: string; count: number }>),
     mostClickedResults: (mostClickedResults as Array<{ url: string; count: number }>),
+    totalIndexedPages: Number(totalPages?.count || 0),
+    totalIndexedNews: Number(totalNews?.count || 0),
+    totalIndexedVideos: Number(totalVideos?.count || 0),
+    totalIndexedImages: Number(totalImages?.count || 0),
   };
 }

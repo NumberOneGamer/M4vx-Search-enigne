@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Trash2, RotateCw, Globe, FileText, Film, Image } from 'lucide-react';
+import { Trash2, RotateCw, Globe, FileText, Film, Image, ExternalLink } from 'lucide-react';
 
 const typeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   web: Globe,
@@ -11,7 +11,7 @@ const typeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
 };
 
 export default function ContentManagementPage() {
-  const [activeType, setActiveType] = useState<string>('all');
+  const [activeType, setActiveType] = useState<string>('web');
   const [items, setItems] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -32,7 +32,7 @@ export default function ContentManagementPage() {
       const res = await fetch(`/api/admin/content?${params}`);
       const data = await res.json();
       if (data.items) setItems(data.items);
-      if (data.total) setTotal(data.total);
+      if (data.total !== undefined) setTotal(data.total);
       if (data.counts) setCounts(data.counts);
     } catch (err) {
       console.error('Failed to fetch content', err);
@@ -51,6 +51,7 @@ export default function ContentManagementPage() {
       body: JSON.stringify({ type, action: 'delete', ids: [id] }),
     });
     fetchItems();
+    fetchCounts();
   };
 
   const reindexItem = async (type: string, id: number) => {
@@ -65,25 +66,24 @@ export default function ContentManagementPage() {
   const totalPages = Math.ceil(total / pageSize);
 
   const types = [
-    { id: 'all', label: 'All Types' },
-    { id: 'web', label: `Web Pages (${counts.web ?? '-'})` },
-    { id: 'news', label: `News (${counts.news ?? '-'})` },
-    { id: 'videos', label: `Videos (${counts.videos ?? '-'})` },
-    { id: 'images', label: `Images (${counts.images ?? '-'})` },
+    { id: 'web', label: `Web Pages (${counts.web ?? '-'})`, icon: Globe },
+    { id: 'news', label: `News (${counts.news ?? '-'})`, icon: FileText },
+    { id: 'videos', label: `Videos (${counts.videos ?? '-'})`, icon: Film },
+    { id: 'images', label: `Images (${counts.images ?? '-'})`, icon: Image },
   ];
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Content Management</h1>
-        <button onClick={fetchItems} className="p-2 rounded-lg hover:bg-muted transition-colors">
+        <button onClick={() => { fetchItems(); fetchCounts(); }} className="p-2 rounded-lg hover:bg-muted transition-colors" title="Refresh">
           <RotateCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
       <div className="flex gap-1 mb-6 overflow-x-auto">
         {types.map((t) => {
-          const Icon = typeIcons[t.id] || Globe;
+          const Icon = t.icon;
           return (
             <button
               key={t.id}
@@ -104,25 +104,26 @@ export default function ContentManagementPage() {
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          {activeType === 'all' ? 'Select a content type to manage' : `No ${activeType} items found`}
-        </div>
+        <div className="text-center py-12 text-muted-foreground">No {activeType} items found</div>
       ) : (
         <div className="space-y-2">
-          {items.map((item) => {
+          {items.map((item, idx) => {
             const Icon = typeIcons[activeType] || Globe;
+            const title = item.headline || item.title || item.altText || item.url;
+            const url = item.url || item.pageUrl;
             return (
-              <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+              <div key={`${activeType}-${item.id}-${idx}`} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
                     <Icon className="w-4 h-4 text-muted-foreground" />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-sm font-medium truncate block">
-                      {item.headline || item.title || item.altText || item.url}
-                    </span>
-                    <span className="text-xs text-muted-foreground truncate block">
-                      {item.url || item.pageUrl}
+                    <span className="text-sm font-medium truncate block">{title}</span>
+                    <span className="text-xs text-muted-foreground truncate block flex items-center gap-1">
+                      {url}
+                      <a href={url?.startsWith('http') ? url : `https://${url}`} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="w-3 h-3 inline hover:text-foreground" />
+                      </a>
                     </span>
                   </div>
                 </div>

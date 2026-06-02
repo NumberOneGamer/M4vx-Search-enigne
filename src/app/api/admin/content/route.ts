@@ -16,6 +16,17 @@ export async function GET(request: NextRequest) {
   const offset = (page - 1) * pageSize;
 
   switch (type) {
+    case 'web': {
+      const [totalResult] = await db.select({ count: count() }).from(pages);
+      const total = totalResult?.count ?? 0;
+      const items = await db
+        .select({ id: pages.id, title: pages.title, url: pages.url, metaDescription: pages.metaDescription, createdAt: pages.createdAt })
+        .from(pages)
+        .orderBy(desc(pages.createdAt))
+        .limit(pageSize)
+        .offset(offset);
+      return NextResponse.json({ items, total, page, pageSize, type });
+    }
     case 'news': {
       const [totalResult] = await db.select({ count: count() }).from(newsArticles);
       const total = totalResult?.count ?? 0;

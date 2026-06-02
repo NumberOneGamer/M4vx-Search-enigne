@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { searchLogs } from '@/db/schema/searchLogs';
 import { clicks } from '@/db/schema/clicks';
+import { pages } from '@/db/schema/pages';
+import { newsArticles } from '@/db/schema/newsArticles';
+import { videos } from '@/db/schema/videos';
+import { images } from '@/db/schema/images';
 import { eq, desc, count, gte, sql, and, isNull, avg } from 'drizzle-orm';
 import { cacheGet, cacheSet, CACHE_TTL } from '@/lib/cache';
 
@@ -14,10 +18,14 @@ export async function GET() {
     const last24h = new Date(Date.now() - 86400000);
     const last7d = new Date(Date.now() - 7 * 86400000);
 
-    const [totalSearches, searches24h, searches7d] = await Promise.all([
+    const [totalSearches, searches24h, searches7d, pageCount, newsCount, videoCount, imageCount] = await Promise.all([
       db.select({ count: count() }).from(searchLogs).then(r => r[0]?.count ?? 0),
       db.select({ count: count() }).from(searchLogs).where(gte(searchLogs.createdAt, last24h)).then(r => r[0]?.count ?? 0),
       db.select({ count: count() }).from(searchLogs).where(gte(searchLogs.createdAt, last7d)).then(r => r[0]?.count ?? 0),
+      db.select({ count: count() }).from(pages).then(r => Number(r[0]?.count || 0)),
+      db.select({ count: count() }).from(newsArticles).then(r => Number(r[0]?.count || 0)),
+      db.select({ count: count() }).from(videos).then(r => Number(r[0]?.count || 0)),
+      db.select({ count: count() }).from(images).then(r => Number(r[0]?.count || 0)),
     ]);
 
     const [zeroResultSearches] = await db
@@ -67,6 +75,10 @@ export async function GET() {
       totalSearches,
       searchesLast24h: searches24h,
       searchesLast7d: searches7d,
+      totalIndexedPages: pageCount,
+      totalIndexedNews: newsCount,
+      totalIndexedVideos: videoCount,
+      totalIndexedImages: imageCount,
       zeroResultSearches: zeroResultSearches?.count ?? 0,
       zeroResultRate: searches7d > 0 ? ((zeroResultSearches?.count ?? 0) / searches7d) * 100 : 0,
       totalClicks: totalClicks?.count ?? 0,

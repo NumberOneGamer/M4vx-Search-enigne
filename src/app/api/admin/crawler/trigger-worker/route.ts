@@ -17,10 +17,11 @@ export async function POST(request: Request) {
 
   try {
     const { worker, limit } = await request.json().catch(() => ({}));
-    if (!worker || !WORKERS[worker]) {
+    const workers = WORKERS as Record<string, { url: string; secret: string }>;
+    if (!worker || !workers[worker]) {
       return NextResponse.json({ error: `Unknown worker: ${worker}` }, { status: 400 });
     }
-    const w = WORKERS[worker];
+    const w = workers[worker];
     const key = process.env[w.secret];
     if (!key) {
       return NextResponse.json({ error: `Secret ${w.secret} not configured` }, { status: 500 });
