@@ -1,0 +1,40 @@
+name: Import Common Crawl
+
+on:
+  workflow_dispatch:
+    inputs:
+      crawl:
+        description: 'Crawl ID (e.g. CC-MAIN-2026-21)'
+        required: true
+        default: 'CC-MAIN-2026-21'
+        type: string
+      files:
+        description: 'Number of WET files to download'
+        required: true
+        default: '10'
+        type: number
+      max_pages:
+        description: 'Max pages to import'
+        required: true
+        default: '200000'
+        type: number
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install
+
+      - name: Import Common Crawl data
+        run: node scripts/import-common-crawl.mjs
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CC_CRAWL: ${{ inputs.crawl }}
+          CC_FILES: ${{ inputs.files }}
+          CC_MAX_PAGES: ${{ inputs.max_pages }}
