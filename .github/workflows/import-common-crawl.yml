@@ -29,8 +29,6 @@ jobs:
         with:
           node-version: 22
 
-      - run: npm install @neondatabase/serverless
-
       - name: Import Common Crawl data
         run: node scripts/import-common-crawl.mjs
         env:

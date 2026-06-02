@@ -1,147 +1,126 @@
-import { neon } from '@neondatabase/serverless';
 import { gunzipSync } from 'zlib';
-
-const sql = neon(process.env.DATABASE_URL);
-
-const CRAWL = process.env.CC_CRAWL || 'CC-MAIN-2026-17';
-const NUM_FILES = parseInt(process.env.CC_FILES || '3', 10);
-const MAX_PAGES = parseInt(process.env.CC_MAX_PAGES || '50000', 10);
+const CRAWL = process.env.CC_CRAWL || 'CC-MAIN-2026-21';
+const NUM_FILES = parseInt(process.env.CC_FILES || '10', 10);
+const MAX_PAGES = parseInt(process.env.CC_MAX_PAGES || '200000', 10);
 const BATCH_SIZE = 50;
+const DB_URL = process.env.DATABASE_URL;
+if (!DB_URL) { console.error('DATABASE_URL required'); process.exit(1); }
 
-function parseDomain(url) {
-  try { return new URL(url).hostname; } catch { return null; }
+const HOST = DB_URL.match(/@([^/]+)/)[1];
+const ENDPOINT = `https://${HOST}/sql`;
+
+async function query(q, params = []) {
+  const res = await fetch(ENDPOINT, {
+    method: 'POST',
+    headers: { 'Neon-Connection-String': DB_URL, 'Neon-Raw-Text-Output': 'true', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: q, params }),
+  });
+  if (!res.ok) { const t = await res.text(); throw new Error(`DB ${res.status}: ${t.slice(0,200)}`); }
+  return res.json();
 }
 
-async function getOrCreateDomain(hostname) {
-  const existing = await sql`SELECT id FROM domains WHERE url = ${hostname} LIMIT 1`;
-  if (existing.length > 0) return existing[0].id;
-  const [row] = await sql`INSERT INTO domains (url, name, authority_score, crawl_rate) VALUES (${hostname}, ${hostname}, 1.0, 1) RETURNING id`;
-  return row.id;
+function hostname(url) { try { return new URL(url).hostname; } catch { return null; } }
+
+async function getOrCreateDomain(host) {
+  const r = await query('SELECT id FROM domains WHERE url = $1', [host]);
+  if (r.rows?.length) return r.rows[0].id;
+  const r2 = await query("INSERT INTO domains (url, name, authority_score, crawl_rate) VALUES ($1, $1, 1.0, 1) RETURNING id", [host]);
+  return r2.rows[0].id;
 }
 
-function parseWetFile(buf) {
+function parseWet(buf) {
   const records = [];
   const text = buf.toString('utf-8');
   let pos = 0;
-
   while (pos < text.length) {
-    const warcStart = text.indexOf('WARC/', pos);
-    if (warcStart === -1) break;
-    pos = warcStart;
-
-    const headerEnd = text.indexOf('\r\n\r\n', pos);
-    if (headerEnd === -1) break;
-    const headerBlock = text.slice(pos, headerEnd);
-
-    const lines = headerBlock.split('\r\n');
+    const ws = text.indexOf('WARC/', pos);
+    if (ws === -1) break;
+    pos = ws;
+    const he = text.indexOf('\r\n\r\n', pos);
+    if (he === -1) break;
+    const hb = text.slice(pos, he);
     const headers = {};
-    for (const line of lines) {
-      const colon = line.indexOf(': ');
-      if (colon > 0) headers[line.slice(0, colon).trim()] = line.slice(colon + 2).trim();
+    for (const line of hb.split('\r\n')) {
+      const ci = line.indexOf(': ');
+      if (ci > 0) headers[line.slice(0, ci).trim()] = line.slice(ci + 2).trim();
     }
-
-    const contentLength = parseInt(headers['Content-Length'], 10);
-    if (isNaN(contentLength)) { pos = headerEnd + 4; continue; }
-
-    const contentStart = headerEnd + 4;
-    const content = text.slice(contentStart, contentStart + contentLength);
-    pos = contentStart + contentLength;
-
+    const cl = parseInt(headers['Content-Length'], 10);
+    if (isNaN(cl)) { pos = he + 4; continue; }
+    const cs = he + 4;
+    const content = text.slice(cs, cs + cl);
+    pos = cs + cl;
     if (headers['WARC-Type'] !== 'conversion' || headers['Content-Type'] !== 'text/plain') continue;
-
     const url = headers['WARC-Target-URI'] || '';
-    const hostname = parseDomain(url);
-    if (!hostname) continue;
-
-    const dateStr = headers['WARC-Date'];
-    const date = dateStr ? new Date(dateStr) : new Date();
-
+    const hn = hostname(url);
+    if (!hn) continue;
     const body = content.replace(/^[ \t]*\r?\n/, '');
-    const firstLine = body.split('\n')[0]?.trim() || '';
-    const title = firstLine.length > 3 && firstLine.length < 500 ? firstLine : hostname;
-    const restContent = body.replace(/^.*\n/, '').trim();
-    const fullContent = title === hostname ? body : restContent;
-    const wordCount = fullContent ? fullContent.split(/\s+/).filter(Boolean).length : 0;
-
-    records.push({ url, hostname, title, content: fullContent, wordCount, date });
+    const fl = body.split('\n')[0]?.trim() || '';
+    const title = fl.length > 3 && fl.length < 500 ? fl : hn;
+    const rest = body.replace(/^.*\n/, '').trim();
+    const fc = title === hn ? body : rest;
+    records.push({ url, hn, title, content: fc, words: fc ? fc.split(/\s+/).filter(Boolean).length : 0, date: headers['WARC-Date'] || '' });
   }
-
   return records;
 }
 
-async function importPages(records) {
-  let inserted = 0, skipped = 0;
-  const domainCache = {};
-
-  for (let i = 0; i < records.length; i += BATCH_SIZE) {
-    const batch = records.slice(i, i + BATCH_SIZE);
-    const values = [];
-
-    for (const rec of batch) {
-      if (!domainCache[rec.hostname]) domainCache[rec.hostname] = await getOrCreateDomain(rec.hostname);
-      const did = domainCache[rec.hostname];
-      const esc = s => s ? `'${String(s).replace(/'/g, "''")}'` : 'NULL';
-      values.push(`(${did},${esc(rec.url)},${esc(rec.title)},${esc(rec.content)},${rec.wordCount},${esc(rec.date.toISOString())},NOW(),NOW())`);
-    }
-
-    try {
-      const r = await sql(`INSERT INTO pages (domain_id, url, title, content, word_count, crawled_at, created_at, updated_at) VALUES ${values.join(',')} ON CONFLICT (url) DO NOTHING RETURNING id`);
-      inserted += r.length;
-      skipped += batch.length - r.length;
-    } catch (e) {
-      console.error(`  Batch error: ${String(e).slice(0, 150)}`);
-      skipped += batch.length;
-    }
-    process.stdout.write(`\r  Progress: ~${Math.round((i + BATCH_SIZE) / records.length * 100)}% (${inserted} in, ${skipped} skip)`);
-  }
-  return { inserted, skipped };
+async function downloadAndParse(path) {
+  const url = `https://data.commoncrawl.org/${path}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  console.log(`    ${(buf.length/1024/1024).toFixed(1)} MB compressed`);
+    const dec = gunzipSync(buf);
+  console.log(`    ${(dec.length/1024/1024).toFixed(1)} MB decompressed`);
+  const recs = parseWet(dec);
+  console.log(`    ${recs.length} pages`);
+  return recs;
 }
 
 async function main() {
-  console.log(`Common Crawl Import`);
-  console.log(`  Crawl: ${CRAWL}, Files: ${NUM_FILES}, Max pages: ${MAX_PAGES}\n`);
+  console.log(`Common Crawl Import (zero-dep)`);
+  console.log(`  Crawl: ${CRAWL}, Files: ${NUM_FILES}, Max: ${MAX_PAGES}\n`);
 
-  const indexPath = `https://data.commoncrawl.org/crawl-data/${CRAWL}/wet.paths.gz`;
-  console.log(`[1] Fetching WET index...`);
-  const idxRes = await fetch(indexPath);
+  console.log('[1] Fetching WET index...');
+  const idxRes = await fetch(`https://data.commoncrawl.org/crawl-data/${CRAWL}/wet.paths.gz`);
   if (!idxRes.ok) throw new Error(`Index HTTP ${idxRes.status}`);
-  const wetPaths = gunzipSync(Buffer.from(await idxRes.arrayBuffer())).toString('utf-8').trim().split('\n').filter(Boolean).map(p => p.trim());
-  console.log(`  ${wetPaths.length} WET files available\n`);
+  const paths = gunzipSync(Buffer.from(await idxRes.arrayBuffer())).toString('utf-8').trim().split('\n').filter(Boolean).map(p => p.trim());
+  console.log(`  ${paths.length} WET files\n`);
 
-  const toDownload = wetPaths.slice(0, NUM_FILES);
-  console.log(`[2] Downloading & parsing ${toDownload.length} files...`);
-  let allRecords = [];
-
-  for (let fi = 0; fi < toDownload.length; fi++) {
-    const url = `https://data.commoncrawl.org/${toDownload[fi]}`;
-    console.log(`  [${fi + 1}/${toDownload.length}] ${toDownload[fi].split('/').pop()}`);
-    try {
-      const res = await fetch(url);
-      if (!res.ok) { console.log(`    SKIP HTTP ${res.status}`); continue; }
-      const raw = Buffer.from(await res.arrayBuffer());
-      console.log(`    ${(raw.length / 1024 / 1024).toFixed(1)} MB compressed`);
-
-      const dec = gunzipSync(raw);
-      console.log(`    ${(dec.length / 1024 / 1024).toFixed(1)} MB decompressed`);
-
-      const records = parseWetFile(dec);
-      console.log(`    ${records.length} pages parsed`);
-      allRecords.push(...records);
-      if (allRecords.length >= MAX_PAGES) { allRecords.length = MAX_PAGES; break; }
-    } catch (e) { console.log(`    ERROR: ${String(e).slice(0, 200)}`); }
+  const toDL = paths.slice(0, NUM_FILES);
+  console.log('[2] Downloading & parsing...');
+  let all = [];
+  for (let fi = 0; fi < toDL.length; fi++) {
+    console.log(`  [${fi+1}/${toDL.length}] ${toDL[fi].split('/').pop()}`);
+    try { const r = await downloadAndParse(toDL[fi]); all.push(...r); if (all.length >= MAX_PAGES) { all.length = MAX_PAGES; break; } }
+    catch (e) { console.log(`    ERROR: ${String(e).slice(0,150)}`); }
   }
 
-  if (!allRecords.length) { console.log('\nNo records. Exiting.'); return; }
+  if (!all.length) { console.log('\nNo records.'); return; }
 
-  console.log(`\n[3] Importing ${allRecords.length} pages to Neon...`);
-  const { inserted, skipped } = await importPages(allRecords);
+  console.log(`\n[3] Inserting ${all.length} pages...`);
+  let inserted = 0, skipped = 0;
+  const dc = {};
 
-  const mb = ((toDownload.length * 70)).toFixed(0);
-  console.log(`\n\n=== DONE ===`);
-  console.log(`  Downloaded: ~${mb} MB (${toDownload.length} WET files)`);
-  console.log(`  Inserted: ${inserted}`);
-  console.log(`  Skipped:  ${skipped}`);
-  console.log(`\n  Run your content indexer next to extract news/images/videos.`);
+  for (let i = 0; i < all.length; i += BATCH_SIZE) {
+    const batch = all.slice(i, i + BATCH_SIZE);
+    const vals = [];
+    for (const r of batch) {
+      if (!dc[r.hn]) dc[r.hn] = await getOrCreateDomain(r.hn);
+      const did = dc[r.hn];
+      const esc = s => s ? `'${String(s).replace(/'/g,"''")}'` : 'NULL';
+      vals.push(`(${did},${esc(r.url)},${esc(r.title)},${esc(r.content)},${r.words},${esc(r.date)},NOW(),NOW())`);
+    }
+    try {
+      const r2 = await query(`INSERT INTO pages (domain_id,url,title,content,word_count,crawled_at,created_at,updated_at) VALUES ${vals.join(',')} ON CONFLICT (url) DO NOTHING RETURNING id`);
+      inserted += (r2.rows || []).length;
+      skipped += batch.length - (r2.rows || []).length;
+    } catch (e) { skipped += batch.length; }
+    process.stdout.write(`\r  ${Math.round((i+BATCH_SIZE)/all.length*100)}% (${inserted} in, ${skipped} skip)`);
+  }
+
+  const mb = (toDL.length * 70).toFixed(0);
+  console.log(`\n\nDone. ${inserted} pages imported. ~${mb} MB downloaded (cloud).`);
+  console.log('Run your indexer next: npm run extract:all');
 }
 
-main().catch(e => { console.error('\nFatal:', e); process.exit(1); });
+main().catch(e => { console.error('\nFatal:', e.message); process.exit(1); });
