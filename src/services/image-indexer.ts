@@ -130,11 +130,30 @@ export async function searchImages(options: ImageSearchOptions): Promise<ImageSe
 
   const totalResults = totalResult?.count ?? 0;
 
+  const orderScores = queryTerms.map(term =>
+    sql`(CASE WHEN ${images.altText} ILIKE ${`%${term}%`} THEN 10 ELSE 0 END + CASE WHEN ${images.caption} ILIKE ${`%${term}%`} THEN 5 ELSE 0 END + CASE WHEN ${images.pageTitle} ILIKE ${`%${term}%`} THEN 3 ELSE 0 END)`
+  );
+  const orderExpr = orderScores.length > 0
+    ? sql`${sql.join(orderScores, sql` + `)} DESC, ${images.searchCount} DESC`
+    : sql`${images.searchCount} DESC`;
+
   const rows = await db
-    .select()
+    .select({
+      id: images.id,
+      url: images.url,
+      altText: images.altText,
+      caption: images.caption,
+      pageTitle: images.pageTitle,
+      pageUrl: images.pageUrl,
+      width: images.width,
+      height: images.height,
+      fileSize: images.fileSize,
+      mimeType: images.mimeType,
+      dominantColor: images.dominantColor,
+    })
     .from(images)
     .where(whereClause)
-    .orderBy(desc(images.searchCount))
+    .orderBy(orderExpr)
     .limit(pageSize)
     .offset(offset);
 

@@ -34,9 +34,9 @@ function extractNewsMeta(html: string | null) {
   return { author, publishedTime, category, publisher };
 }
 
-function extractImagesFromHtml(html: string | null, baseUrl: string): Array<{ url: string; altText: string | null; width: number | null; height: number | null }> {
+function extractImagesFromHtml(html: string | null, baseUrl: string): Array<{ url: string; altText: string | null; caption: string | null; width: number | null; height: number | null }> {
   if (!html) return [];
-  const imgs: Array<{ url: string; altText: string | null; width: number | null; height: number | null }> = [];
+  const imgs: Array<{ url: string; altText: string | null; caption: string | null; width: number | null; height: number | null }> = [];
   const regex = /<img[^>]+src\s*=\s*"([^"]+)"[^>]*>/gi;
   let m;
   while ((m = regex.exec(html)) !== null) {
@@ -45,9 +45,10 @@ function extractImagesFromHtml(html: string | null, baseUrl: string): Array<{ ur
     try {
       const absUrl = new URL(src, baseUrl).href;
       const alt = m[0].match(/alt\s*=\s*"([^"]*)"/i)?.[1] || null;
+      const title = m[0].match(/title\s*=\s*"([^"]*)"/i)?.[1] || null;
       const width = m[0].match(/width\s*=\s*"?(\d+)"?/i) ? parseInt(m[0].match(/width\s*=\s*"?(\d+)"?/i)![1]) : null;
       const height = m[0].match(/height\s*=\s*"?(\d+)"?/i) ? parseInt(m[0].match(/height\s*=\s*"?(\d+)"?/i)![1]) : null;
-      imgs.push({ url: absUrl, altText: alt, width, height });
+      imgs.push({ url: absUrl, altText: alt, caption: title, width, height });
     } catch { continue; }
   }
   return imgs;
@@ -160,6 +161,7 @@ async function extractImagesFromPage(page: typeof pages.$inferSelect, html: stri
       .values({
         url: img.url,
         altText: img.altText,
+        caption: img.caption,
         pageTitle: page.title,
         pageUrl: page.url,
         contextContent: page.content ? page.content.slice(0, 500) : null,

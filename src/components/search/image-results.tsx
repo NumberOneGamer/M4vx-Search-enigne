@@ -3,6 +3,7 @@
 import { ImageResult } from '@/types';
 import { Image, X, ExternalLink, Info, Maximize2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { highlightMatches } from '@/lib/utils';
 
 interface ImageResultsProps {
   results: ImageResult[];
@@ -103,9 +104,10 @@ function getColorClass(color: string | null): string {
   return colorMap[color.toLowerCase()] || '';
 }
 
-export function ImageResults({ results }: ImageResultsProps) {
+export function ImageResults({ results, query }: ImageResultsProps) {
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [loaded, setLoaded] = useState<Set<number>>(new Set());
+  const highlightTerms = query ? [...query.split(/\s+/).filter(Boolean)] : [];
 
   if (!results.length) {
     return (
@@ -141,7 +143,7 @@ export function ImageResults({ results }: ImageResultsProps) {
             </div>
             {(image.altText || image.caption || image.pageTitle) && (
               <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">
-                {image.caption || image.altText || image.pageTitle}
+                <span dangerouslySetInnerHTML={{ __html: highlightMatches(image.caption || image.altText || image.pageTitle || '', highlightTerms) }} />
               </p>
             )}
           </div>
