@@ -13,7 +13,7 @@ import { parseQuery, buildDateCondition } from '@/lib/search/query-parser';
 import { tokenizeQuery, calculateTfIdf } from '@/lib/search/tokenizer';
 import type { SearchResponse, SearchResult } from '@/types';
 
-const FTS_COL = sql`to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, ''))`;
+const FTS_COL = sql`to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(headings, '') || ' ' || COALESCE(meta_description, '') || ' ' || COALESCE(content, ''))`;
 const FTS_QUERY = (q: string) => sql`plainto_tsquery('english', ${q})`;
 const PHRASE_QUERY = (q: string) => sql`phraseto_tsquery('english', ${q})`;
 
@@ -148,7 +148,7 @@ export async function GET(request: Request) {
     } else {
       if (effectiveExactPhrases.length > 0) {
         conditions.push(or(...effectiveExactPhrases.map(phrase =>
-          sql`to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(content, '')) @@ ${PHRASE_QUERY(phrase)}`
+          sql`to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(headings, '') || ' ' || COALESCE(meta_description, '') || ' ' || COALESCE(content, '')) @@ ${PHRASE_QUERY(phrase)}`
         )));
       }
       conditions.unshift(sql`${FTS_COL} @@ ${FTS_QUERY(effectiveQ)}`);
