@@ -23,6 +23,11 @@ on:
         required: true
         default: false
         type: boolean
+      cleanup:
+        description: 'Truncate old page content to free storage?'
+        required: true
+        default: false
+        type: boolean
 
 env:
   DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -62,3 +67,11 @@ jobs:
         if: inputs.extract
         run: npx tsx src/services/content-extractor.ts videos
         timeout-minutes: 60
+
+      - name: Install deps for cleanup
+        if: inputs.cleanup
+        run: npm ci
+
+      - name: Truncate old content to free storage
+        if: inputs.cleanup
+        run: npx tsx scripts/cleanup-content.ts
