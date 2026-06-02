@@ -6,6 +6,9 @@ import { pages } from '@/db/schema/pages';
 import { domains } from '@/db/schema/domains';
 import { crawlQueue } from '@/db/schema/crawlQueue';
 import { users } from '@/db/schema/users';
+import { newsArticles } from '@/db/schema/newsArticles';
+import { videos } from '@/db/schema/videos';
+import { images } from '@/db/schema/images';
 import { sql, eq, and, gte, lte, desc, count } from 'drizzle-orm';
 import type { AdminStats } from '@/types';
 
@@ -86,6 +89,28 @@ export async function getAdminStats(): Promise<AdminStats> {
     .select({ avg: sql<number>`COALESCE(AVG(response_time_ms), 0)` })
     .from(searchLogs);
 
+  const [totalNewsResult] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(newsArticles);
+  const [totalVideosResult] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(videos);
+  const [totalImagesResult] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(images);
+  const [indexedNewsResult] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(newsArticles)
+    .where(eq(newsArticles.isIndexed, true));
+  const [indexedVideosResult] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(videos)
+    .where(eq(videos.isIndexed, true));
+  const [indexedImagesResult] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(images)
+    .where(eq(images.isIndexed, true));
+
   const topQueries = await db
     .select({ term: searchTerms.term, frequency: searchTerms.frequency })
     .from(searchTerms)
@@ -135,6 +160,12 @@ export async function getAdminStats(): Promise<AdminStats> {
     totalUsers: Number(totalUsersResult?.count || 0),
     queueSize: Number(queueSizeResult?.count || 0),
     avgResponseTime: Math.round(Number(avgResponseTimeResult?.avg || 0)),
+    totalNewsArticles: Number(totalNewsResult?.count || 0),
+    totalVideos: Number(totalVideosResult?.count || 0),
+    totalImages: Number(totalImagesResult?.count || 0),
+    indexedNews: Number(indexedNewsResult?.count || 0),
+    indexedVideos: Number(indexedVideosResult?.count || 0),
+    indexedImages: Number(indexedImagesResult?.count || 0),
     topQueries: topQueries as AdminStats['topQueries'],
     searchTrend: (searchTrend as Array<{ date: string; count: number }>),
     crawlRate: (crawlRate as Array<{ date: string; count: number }>),

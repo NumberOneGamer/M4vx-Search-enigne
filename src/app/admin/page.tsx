@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Database, Globe, Search, Users, Clock, BarChart3, TrendingUp, RefreshCw } from 'lucide-react';
+import { Database, Globe, Search, Users, Clock, BarChart3, TrendingUp, RefreshCw, Newspaper, Video, Image } from 'lucide-react';
 import type { AdminStats } from '@/types';
 import { CardSkeleton, Skeleton } from '@/components/ui/skeleton';
 
@@ -45,6 +45,9 @@ export default function AdminDashboard() {
     { label: 'Users', value: stats?.totalUsers ?? 0, icon: Users },
     { label: 'Queue Size', value: stats?.queueSize ?? 0, icon: Clock },
     { label: 'Avg Response', value: stats ? `${stats.avgResponseTime}ms` : '0ms', icon: BarChart3 },
+    { label: 'News Articles', value: stats?.totalNewsArticles ?? 0, icon: Newspaper },
+    { label: 'Videos', value: stats?.totalVideos ?? 0, icon: Video },
+    { label: 'Images', value: stats?.totalImages ?? 0, icon: Image },
   ];
 
   if (loading) {

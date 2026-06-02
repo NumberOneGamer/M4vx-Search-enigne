@@ -1,0 +1,10 @@
+name = "m4vx-extractor-videos"
+main = "workers/extractor-videos.ts"
+compatibility_date = "2026-05-30"
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+EXTRACTOR_SECRET = "pigga"

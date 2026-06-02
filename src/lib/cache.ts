@@ -21,7 +21,7 @@ export const CACHE_TTL = {
   TRENDING: 900,
   POPULAR: 1800,
   RANKING_FACTORS: 3600,
-  ADMIN_STATS: 120,
+  ADMIN_STATS: 60,
 };
 
 export async function cacheGet<T>(key: string): Promise<T | null> {
