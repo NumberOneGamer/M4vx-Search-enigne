@@ -17,7 +17,7 @@ export async function searchRankedPages(
   if (queryTokens.length === 0) return [];
 
   const keywordConditions = queryTokens.map(
-    (token) => sql`LOWER(${rankings.keyword}) = ${token.toLowerCase()}`
+    (token) => eq(rankings.keyword, token.toLowerCase())
   );
 
   const results = await db
