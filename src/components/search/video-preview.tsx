@@ -2,7 +2,8 @@
 
 import { VideoResult } from '@/types';
 import { X, Play, ExternalLink, Eye, Clock, User } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { highlightMatches } from '@/lib/utils';
 
 interface VideoPreviewModalProps {
   video: VideoResult;
@@ -17,6 +18,9 @@ function formatDuration(seconds: number | null): string {
 }
 
 export function VideoPreviewModal({ video, onClose }: VideoPreviewModalProps) {
+  const [embedError, setEmbedError] = useState(false);
+  const highlightTerms: string[] = [];
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -40,12 +44,13 @@ export function VideoPreviewModal({ video, onClose }: VideoPreviewModalProps) {
         </button>
 
         <div className="aspect-video bg-muted relative">
-          {video.embedUrl ? (
+          {video.embedUrl && !embedError ? (
             <iframe
               src={video.embedUrl}
               className="w-full h-full"
               allow="autoplay; encrypted-media"
               allowFullScreen
+              onError={() => setEmbedError(true)}
             />
           ) : video.thumbnailUrl ? (
             <div className="relative w-full h-full">
@@ -64,6 +69,14 @@ export function VideoPreviewModal({ video, onClose }: VideoPreviewModalProps) {
               <Play className="w-16 h-16 text-muted-foreground/30" />
             </div>
           )}
+          {embedError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/90 gap-3 p-4">
+              <p className="text-sm text-muted-foreground">Could not load embedded video</p>
+              <a href={video.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-foreground text-background rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+                <ExternalLink className="w-4 h-4" /> Open on {video.source || 'YouTube'}
+              </a>
+            </div>
+          )}
           {video.duration && (
             <span className="absolute bottom-3 right-3 px-2 py-1 rounded bg-black/80 text-white text-sm font-medium">
               {formatDuration(video.duration)}
@@ -72,9 +85,9 @@ export function VideoPreviewModal({ video, onClose }: VideoPreviewModalProps) {
         </div>
 
         <div className="p-4">
-          <h2 className="text-lg font-semibold mb-2">{video.title}</h2>
+          <h2 className="text-lg font-semibold mb-2" dangerouslySetInnerHTML={{ __html: highlightMatches(video.title, highlightTerms) }} />
           {video.description && (
-            <p className="text-sm text-muted-foreground mb-3 line-clamp-3">{video.description}</p>
+            <p className="text-sm text-muted-foreground mb-3 line-clamp-3" dangerouslySetInnerHTML={{ __html: highlightMatches(video.description, highlightTerms) }} />
           )}
           <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
             {video.channelName && (

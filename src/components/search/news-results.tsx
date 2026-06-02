@@ -1,7 +1,7 @@
 'use client';
 
 import { NewsResult } from '@/types';
-import { timeAgo, extractDomain } from '@/lib/utils';
+import { timeAgo, extractDomain, highlightMatches } from '@/lib/utils';
 import { FileText, Clock, User, Building2 } from 'lucide-react';
 
 interface NewsResultsProps {
@@ -10,6 +10,8 @@ interface NewsResultsProps {
 }
 
 export function NewsResults({ results, query }: NewsResultsProps) {
+  const highlightTerms = query ? [...query.split(/\s+/).filter(Boolean)] : [];
+
   if (!results.length) {
     return (
       <div className="text-center py-12">
@@ -35,13 +37,15 @@ export function NewsResults({ results, query }: NewsResultsProps) {
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <h3 className="text-base font-medium text-foreground group-hover:text-primary line-clamp-2 mb-1">
-                {article.headline}
-              </h3>
+              <h3
+                className="text-base font-medium text-foreground group-hover:text-primary line-clamp-2 mb-1"
+                dangerouslySetInnerHTML={{ __html: highlightMatches(article.headline, highlightTerms) }}
+              />
               {article.description && (
-                <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                  {article.description}
-                </p>
+                <p
+                  className="text-sm text-muted-foreground line-clamp-2 mb-2"
+                  dangerouslySetInnerHTML={{ __html: highlightMatches(article.description, highlightTerms) }}
+                />
               )}
               <div className="flex items-center gap-3 text-xs text-muted-foreground/70 flex-wrap">
                 {article.publisher && (

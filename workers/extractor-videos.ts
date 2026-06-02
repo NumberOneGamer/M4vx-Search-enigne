@@ -1,7 +1,7 @@
 // @ts-nocheck
 const VIDEO_PLATFORMS = [
-  { host: 'youtube.com', extract: (url) => { const m = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/); return m ? `https://www.youtube.com/embed/${m[1]}` : null; } },
-  { host: 'youtu.be', extract: (url) => { const m = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/); return m ? `https://www.youtube.com/embed/${m[1]}` : null; } },
+  { host: 'youtube.com', extract: (url) => { const m = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/); return m ? `https://www.youtube-nocookie.com/embed/${m[1]}` : null; } },
+  { host: 'youtu.be', extract: (url) => { const m = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/); return m ? `https://www.youtube-nocookie.com/embed/${m[1]}` : null; } },
   { host: 'vimeo.com', extract: (url) => { const m = url.match(/vimeo\.com\/(\d+)/); return m ? `https://player.vimeo.com/video/${m[1]}` : null; } },
   { host: 'dailymotion.com', extract: (url) => { const m = url.match(/dailymotion\.com\/video\/([a-zA-Z0-9]+)/); return m ? `https://www.dailymotion.com/embed/video/${m[1]}` : null; } },
 ];

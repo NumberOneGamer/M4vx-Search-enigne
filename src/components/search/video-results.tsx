@@ -1,7 +1,7 @@
 'use client';
 
 import { VideoResult } from '@/types';
-import { timeAgo } from '@/lib/utils';
+import { timeAgo, highlightMatches } from '@/lib/utils';
 import { Film, Clock, Eye, Play } from 'lucide-react';
 import { useState } from 'react';
 import { VideoPreviewModal } from './video-preview';
@@ -25,8 +25,9 @@ function formatViews(count: number | null): string {
   return count.toString();
 }
 
-export function VideoResults({ results }: VideoResultsProps) {
+export function VideoResults({ results, query }: VideoResultsProps) {
   const [previewVideo, setPreviewVideo] = useState<VideoResult | null>(null);
+  const highlightTerms = query ? [...query.split(/\s+/).filter(Boolean)] : [];
 
   if (!results.length) {
     return (
@@ -78,12 +79,13 @@ export function VideoResults({ results }: VideoResultsProps) {
               rel="noopener noreferrer"
               className="block mt-2"
             >
-              <h3 className="text-sm font-medium text-foreground line-clamp-2 group-hover:text-primary transition-colors">
-                {video.title}
-              </h3>
+              <h3
+                className="text-sm font-medium text-foreground line-clamp-2 group-hover:text-primary transition-colors"
+                dangerouslySetInnerHTML={{ __html: highlightMatches(video.title, highlightTerms) }}
+              />
             </a>
             {video.channelName && (
-              <p className="text-xs text-muted-foreground mt-0.5">{video.channelName}</p>
+              <p className="text-xs text-muted-foreground mt-0.5" dangerouslySetInnerHTML={{ __html: highlightMatches(video.channelName, highlightTerms) }} />
             )}
             <div className="flex items-center gap-2 text-xs text-muted-foreground/70 mt-0.5">
               {video.viewCount !== null && (
