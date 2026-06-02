@@ -1,6 +1,6 @@
 # M4vx Search Engine
 
-A production-ready web search engine built with Next.js 14, TypeScript, PostgreSQL, Drizzle ORM, Redis, and Tailwind CSS.
+A production-ready web search engine built with Next.js 15, TypeScript, PostgreSQL, Drizzle ORM, Redis, and Tailwind CSS.
 
 ## Architecture
 

@@ -122,7 +122,7 @@ function SearchContent() {
         }
         setHasMoreImages(data.results.length === 20);
       }
-    } catch { }
+    } catch (e) { console.error('Image fetch error:', e); }
     setImageLoading(false);
   }, [imageFilter]);
 
@@ -180,7 +180,7 @@ function SearchContent() {
           return null;
         })
         .then((data) => setAiAnswer(data))
-        .catch(() => {})
+        .catch((e) => console.error('AI answer fetch error:', e))
         .finally(() => setAiLoading(false));
     }
   }, [query, page, activeTab, newsFilter, videoFilter, fetchImages, pageSize]);
@@ -189,7 +189,7 @@ function SearchContent() {
     fetch('/api/suggestions?q=trending&limit=5')
       .then((res) => res.ok ? res.json() : null)
       .then((data) => { if (data?.suggestions) setTrending(data.suggestions); })
-      .catch(() => {});
+      .catch((e) => console.error('Trending fetch error:', e));
   }, []);
 
   const handleSearch = (e: FormEvent) => {
@@ -207,7 +207,7 @@ function SearchContent() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ searchLogId: 0, position, url: result.url, pageId: result.id }),
-    }).catch(() => {});
+    }).catch((e) => console.error('Analytics click error:', e));
   }, []);
 
   const appliedFilters = webResults?.appliedFilters;
