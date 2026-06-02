@@ -18,6 +18,14 @@ on:
         required: true
         default: '200000'
         type: number
+      extract:
+        description: 'Also extract images/videos/news from imported pages?'
+        required: true
+        default: false
+        type: boolean
+
+env:
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
 jobs:
   import:
@@ -32,7 +40,25 @@ jobs:
       - name: Import Common Crawl data
         run: node scripts/import-common-crawl.mjs
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           CC_CRAWL: ${{ inputs.crawl }}
           CC_FILES: ${{ inputs.files }}
           CC_MAX_PAGES: ${{ inputs.max_pages }}
+
+      - name: Install dependencies
+        if: inputs.extract
+        run: npm install tsx
+
+      - name: Extract images
+        if: inputs.extract
+        run: npx tsx src/services/content-extractor.ts images
+        timeout-minutes: 60
+
+      - name: Extract news
+        if: inputs.extract
+        run: npx tsx src/services/content-extractor.ts news
+        timeout-minutes: 60
+
+      - name: Extract videos
+        if: inputs.extract
+        run: npx tsx src/services/content-extractor.ts videos
+        timeout-minutes: 60
