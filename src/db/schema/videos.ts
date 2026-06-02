@@ -10,7 +10,7 @@ export const videos = pgTable('videos', {
   channelName: varchar('channel_name', { length: 500 }),
   channelUrl: varchar('channel_url', { length: 2048 }),
   publishDate: timestamp('publish_date'),
-  viewCount: integer('view_count').default(0),
+  viewCount: integer('view_count'),
   tags: text('tags'),
   source: varchar('source', { length: 100 }),
   embedUrl: text('embed_url'),

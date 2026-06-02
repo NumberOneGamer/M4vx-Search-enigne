@@ -13,6 +13,12 @@ const VIDEO_PLATFORMS = [
   { host: 'dailymotion.com', extract: (url: string) => { const m = url.match(/dailymotion\.com\/video\/([a-zA-Z0-9]+)/); return m ? `https://www.dailymotion.com/embed/video/${m[1]}` : null; } },
 ];
 
+function extractVideoThumbnail(embedUrl: string | null): string | null {
+  if (!embedUrl) return null;
+  const m = embedUrl.match(/\/embed\/([a-zA-Z0-9_-]{11})/);
+  return m ? `https://img.youtube.com/vi/${m[1]}/maxresdefault.jpg` : null;
+}
+
 function extractNewsMeta(html: string | null) {
   if (!html) return {};
   const author = html.match(/<meta[^>]+name="author"[^>]+content="([^"]+)"/i)?.[1]
@@ -183,7 +189,8 @@ async function extractVideosFromPage(page: typeof pages.$inferSelect, html: stri
         title: vid.title || page.title || 'Untitled',
         description: page.metaDescription || null,
         embedUrl: vid.embedUrl,
-        source: vid.url.includes('youtube') || vid.url.includes('youtu.be') ? 'youtube' : vid.url.includes('vimeo') ? 'vimeo' : 'other',
+        thumbnailUrl: extractVideoThumbnail(vid.embedUrl),
+        source: vid.embedUrl?.includes('youtube-nocookie') ? 'youtube' : vid.embedUrl?.includes('vimeo') ? 'vimeo' : 'other',
         isIndexed: true,
         indexedAt: new Date(),
       })

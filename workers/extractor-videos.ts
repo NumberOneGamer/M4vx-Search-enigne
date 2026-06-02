@@ -50,6 +50,11 @@ function extractVideos(html, baseUrl) {
   return vids;
 }
 
+function extractThumbnail(embedUrl) {
+  const m = embedUrl && embedUrl.match(/\/embed\/([a-zA-Z0-9_-]{11})/);
+  return m ? `https://img.youtube.com/vi/${m[1]}/maxresdefault.jpg` : null;
+}
+
 async function processPage(page, env) {
   try {
     const res = await fetch(page.url, { headers: { 'User-Agent': 'VideoExtractorBot/1.0', Accept: 'text/html,application/xhtml+xml' }, signal: AbortSignal.timeout(10000) });
@@ -65,10 +70,11 @@ async function processPage(page, env) {
       const esc = s => s ? `'${s.replace(/'/g,"''")}'` : 'NULL';
       const title = v.title || page.title || 'Untitled';
       const source = v.url.includes('youtube-nocookie') ? 'youtube' : v.url.includes('vimeo') ? 'vimeo' : 'other';
-      values.push(`(${esc(v.url)},${esc(title)},${esc(v.embedUrl)},${esc(source)},true,NOW())`);
+      const thumb = extractThumbnail(v.embedUrl);
+      values.push(`(${esc(v.url)},${esc(title)},${esc(v.embedUrl)},${esc(source)},${esc(thumb)},true,NOW())`);
     }
     for (let i = 0; i < values.length; i += 25) {
-      try { await sql(`INSERT INTO videos (url,title,embed_url,source,is_indexed,indexed_at) VALUES ${values.slice(i,i+25).join(',')} ON CONFLICT (url) DO NOTHING`, [], env); } catch {}
+      try { await sql(`INSERT INTO videos (url,title,embed_url,source,thumbnail_url,is_indexed,indexed_at) VALUES ${values.slice(i,i+25).join(',')} ON CONFLICT (url) DO NOTHING`, [], env); } catch {}
     }
   } catch(e) { console.error('Video extract error:', page.url, String(e).slice(0,200)); }
 }
