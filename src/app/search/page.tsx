@@ -274,10 +274,7 @@ function SearchContent() {
               <ThemeToggle />
             </div>
           </div>
-          <div className="flex items-center gap-3 border-b border-border/50">
-            <div aria-hidden="true" className="text-lg font-bold shrink-0 tracking-tight invisible select-none">
-              <span className="text-gradient">M4vx</span>
-            </div>
+          <div className="flex items-center border-b border-border/50">
             <SearchTabs activeTab={activeTab} onTabChange={handleTabChange} />
             <div className="flex items-center gap-1 ml-auto">
               <select

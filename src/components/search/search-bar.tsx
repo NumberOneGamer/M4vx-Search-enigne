@@ -6,6 +6,20 @@ import { Search, X, TrendingUp, History, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { highlightMatches } from '@/lib/utils';
 
+const RECENT_KEY = 'recent_searches';
+const MAX_RECENT = 10;
+
+function loadRecent(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveRecent(searches: string[]) {
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(searches)); } catch {}
+}
+
 interface SearchBarProps {
   query: string;
   onChange: (value: string) => void;
@@ -17,6 +31,7 @@ interface SearchBarProps {
 
 export function SearchBar({ query, onChange, onSubmit, showSuggestions, large, placeholder }: SearchBarProps) {
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
@@ -25,21 +40,40 @@ export function SearchBar({ query, onChange, onSubmit, showSuggestions, large, p
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const router = useRouter();
 
+  useEffect(() => {
+    setRecentSearches(loadRecent());
+  }, []);
+
+  const addRecent = useCallback((term: string) => {
+    const trimmed = term.trim();
+    if (!trimmed) return;
+    setRecentSearches((prev) => {
+      const filtered = prev.filter((s) => s.toLowerCase() !== trimmed.toLowerCase());
+      const next = [trimmed, ...filtered].slice(0, MAX_RECENT);
+      saveRecent(next);
+      return next;
+    });
+  }, []);
+
+  const removeRecent = useCallback((term: string) => {
+    setRecentSearches((prev) => {
+      const next = prev.filter((s) => s !== term);
+      saveRecent(next);
+      return next;
+    });
+  }, []);
+
   const fetchSuggestions = useCallback(async (prefix: string) => {
     if (!showSuggestions || prefix.length < 2) {
       setSuggestions([]);
-      setShowDropdown(false);
       return;
     }
-
     setLoading(true);
     try {
       const res = await fetch(`/api/suggestions?q=${encodeURIComponent(prefix)}&limit=8`);
       if (res.ok) {
         const data = await res.json();
-        const items = data.suggestions || [];
-        setSuggestions(items);
-        setShowDropdown(items.length > 0);
+        setSuggestions(data.suggestions || []);
       }
     } catch {
     } finally {
@@ -56,6 +90,12 @@ export function SearchBar({ query, onChange, onSubmit, showSuggestions, large, p
   }, [query, fetchSuggestions]);
 
   useEffect(() => {
+    const hasRecent = recentSearches.length > 0;
+    const hasSuggestions = suggestions.length > 0;
+    setShowDropdown(hasRecent || hasSuggestions || loading);
+  }, [recentSearches, suggestions, loading]);
+
+  useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
           inputRef.current && !inputRef.current.contains(e.target as Node)) {
@@ -66,24 +106,38 @@ export function SearchBar({ query, onChange, onSubmit, showSuggestions, large, p
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const selectSuggestion = (suggestion: string) => {
-    onChange(suggestion);
-    router.push(`/search?q=${encodeURIComponent(suggestion)}`);
+  const navigate = useCallback((term: string) => {
+    onChange(term);
+    addRecent(term);
+    router.push(`/search?q=${encodeURIComponent(term)}`);
+    setShowDropdown(false);
+    setSelectedIndex(-1);
+  }, [onChange, addRecent, router]);
+
+  const handleSubmit = (e: FormEvent) => {
+    if (query.trim()) addRecent(query.trim());
+    onSubmit(e);
     setShowDropdown(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!showDropdown || suggestions.length === 0) return;
+    if (!showDropdown) return;
+
+    const totalItems = recentSearches.length + suggestions.length;
+    if (totalItems === 0) return;
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelectedIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
+      setSelectedIndex((prev) => (prev < totalItems - 1 ? prev + 1 : 0));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : totalItems - 1));
     } else if (e.key === 'Enter' && selectedIndex >= 0) {
       e.preventDefault();
-      selectSuggestion(suggestions[selectedIndex]);
+      const item = selectedIndex < recentSearches.length
+        ? recentSearches[selectedIndex]
+        : suggestions[selectedIndex - recentSearches.length];
+      if (item) navigate(item);
     } else if (e.key === 'Escape') {
       setShowDropdown(false);
       setSelectedIndex(-1);
@@ -94,7 +148,7 @@ export function SearchBar({ query, onChange, onSubmit, showSuggestions, large, p
 
   return (
     <div className="relative w-full">
-      <form onSubmit={onSubmit} className="relative">
+      <form onSubmit={handleSubmit} className="relative">
         <div className={`relative flex items-center ${large ? 'h-14' : 'h-12'}`}>
           <Search className={`absolute left-4 text-muted-foreground ${large ? 'h-6 w-6' : 'h-5 w-5'}`} />
           <input
@@ -110,7 +164,9 @@ export function SearchBar({ query, onChange, onSubmit, showSuggestions, large, p
               setSelectedIndex(-1);
             }}
             onFocus={() => {
-              if (suggestions.length > 0) setShowDropdown(true);
+              const hasRecent = recentSearches.length > 0;
+              const hasSuggestions = suggestions.length > 0;
+              setShowDropdown(hasRecent || hasSuggestions);
             }}
             onKeyDown={handleKeyDown}
             placeholder={inputPlaceholder}
@@ -141,7 +197,7 @@ export function SearchBar({ query, onChange, onSubmit, showSuggestions, large, p
       </form>
 
       <AnimatePresence>
-        {showSuggestions && showDropdown && suggestions.length > 0 && (
+        {showDropdown && (recentSearches.length > 0 || suggestions.length > 0) && (
           <motion.div
             ref={dropdownRef}
             initial={{ opacity: 0, y: -8, scale: 0.98 }}
@@ -150,27 +206,69 @@ export function SearchBar({ query, onChange, onSubmit, showSuggestions, large, p
             transition={{ duration: 0.12 }}
             className="absolute z-50 w-full mt-2 bg-card border border-border rounded-xl shadow-modal overflow-hidden"
           >
-            {suggestions.map((suggestion, i) => (
-              <button
-                key={suggestion}
-                type="button"
-                onClick={() => selectSuggestion(suggestion)}
-                onMouseEnter={() => setSelectedIndex(i)}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-sm text-left
-                  transition-colors
-                  ${i === selectedIndex ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}
-                role="option"
-                aria-selected={i === selectedIndex}
-              >
-                <Search className="h-3.5 w-3.5 shrink-0 opacity-60" />
-                <span
-                  className="truncate"
-                  dangerouslySetInnerHTML={{
-                    __html: highlightMatches(suggestion, query),
-                  }}
-                />
-              </button>
-            ))}
+            {recentSearches.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-muted-foreground/60 uppercase tracking-wider">
+                  <History className="h-3 w-3" />
+                  Recent
+                </div>
+                {recentSearches.map((term, i) => (
+                  <button
+                    key={`r-${term}`}
+                    type="button"
+                    onClick={() => navigate(term)}
+                    onMouseEnter={() => setSelectedIndex(i)}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors ${
+                      i === selectedIndex ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                    }`}
+                    role="option"
+                    aria-selected={i === selectedIndex}
+                  >
+                    <History className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                    <span className="truncate flex-1">{term}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); removeRecent(term); }}
+                      className="p-0.5 rounded hover:bg-background opacity-40 hover:opacity-100 transition-opacity"
+                      aria-label="Remove"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </button>
+                ))}
+              </div>
+            )}
+            {suggestions.length > 0 && (
+              <div>
+                {recentSearches.length > 0 && (
+                  <div className="border-t border-border/50" />
+                )}
+                {suggestions.map((suggestion, i) => {
+                  const idx = recentSearches.length + i;
+                  return (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => navigate(suggestion)}
+                      onMouseEnter={() => setSelectedIndex(idx)}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors ${
+                        idx === selectedIndex ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                      }`}
+                      role="option"
+                      aria-selected={idx === selectedIndex}
+                    >
+                      <Search className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                      <span
+                        className="truncate"
+                        dangerouslySetInnerHTML={{
+                          __html: highlightMatches(suggestion, query),
+                        }}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

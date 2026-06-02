@@ -19,7 +19,7 @@ interface SearchTabsProps {
 
 export function SearchTabs({ activeTab, onTabChange, counts }: SearchTabsProps) {
   return (
-    <div className="flex items-center gap-1 border-b border-border/50 pb-0.5 overflow-x-auto scrollbar-none">
+    <div className="flex items-center justify-center gap-1 border-b border-border/50 pb-0.5 overflow-x-auto scrollbar-none">
       {tabs.map((tab) => (
         <button
           key={tab.id}
