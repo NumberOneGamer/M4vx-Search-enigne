@@ -1,10 +1,14 @@
 name = "m4vx-crawler"
-main = "workers/crawler.ts"
+main = "workers/crawler-selfcontained.ts"
 compatibility_date = "2026-05-30"
 compatibility_flags = ["nodejs_compat"]
 
+# Runs every 2 minutes:
+# 1. Seeds URLs from CRAWLER_SEED_URLS if queue is near-empty
+# 2. Processes 20 URLs from the queue (per-URL error handling, no batch crash)
 [triggers]
-crons = ["*/5 * * * *"]  # Every 5 min: seed URLs from sitemaps + process a small batch
+crons = ["*/2 * * * *"]
 
 [vars]
 CRAWLER_BATCH_MAX = "50"
+CRAWLER_SEED_URLS = "https://en.wikipedia.org/wiki/Search_engine"

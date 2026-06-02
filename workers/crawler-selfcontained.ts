@@ -248,8 +248,26 @@ export default {
       return new Response(JSON.stringify({ reset: before }), { headers: { 'Content-Type':'application/json' } });
     }
 
-    // ── CONSUMER: Process batch from queue ──
+    // ── CONSUMER: Process batch from queue (with auto-seed when queue is low) ──
     try {
+      // Auto-seed if queue is running low (cron trigger mode)
+      const [pendingCount] = await sql("SELECT COUNT(*) c FROM crawl_queue WHERE status='pending' AND (scheduled_at IS NULL OR scheduled_at<NOW())", [], env);
+      if (Number(pendingCount?.c || 0) < 10) {
+        const seeds = (env.CRAWLER_SEED_URLS || '').split(',').filter(Boolean);
+        for (const seed of seeds) {
+          try {
+            const nu = new URL(seed.trim()).href.replace(/\/$/,'');
+            const domain = nu.match(/https?:\/\/([^\/]+)/)[1];
+            let [dom] = await sql("SELECT id FROM domains WHERE name=$1",[domain],env);
+            if (!dom) { const dr = await sql("INSERT INTO domains (name) VALUES($1) RETURNING id",[domain],env); dom = dr[0]; }
+            const [eQ] = await sql("SELECT id FROM crawl_queue WHERE url=$1 AND status='pending'",[nu],env);
+            const [eP] = await sql("SELECT id FROM pages WHERE url=$1",[nu],env);
+            if (!eQ && !eP) {
+              await sql("INSERT INTO crawl_queue (domain_id,url,priority,depth,status) VALUES($1,$2,10,0,'pending')",[dom.id,nu],env);
+            }
+          } catch {}
+        }
+      }
       const batchSize = parseInt(url.searchParams.get('batch') || '20', 10);
       const maxPages = parseInt(env.CRAWLER_BATCH_MAX || '50', 10);
       const actualBatch = Math.min(batchSize, maxPages);

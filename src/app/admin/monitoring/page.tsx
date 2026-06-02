@@ -26,6 +26,7 @@ export default function MonitoringPage() {
     try {
       const res = await fetch('/api/admin/monitoring');
       const data = await res.json();
+      if (data.error) throw new Error(data.error);
       setStats(data);
     } catch (err) {
       console.error('Failed to fetch monitoring stats', err);

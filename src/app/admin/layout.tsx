@@ -7,7 +7,7 @@ import Link from 'next/link';
 import {
   LayoutDashboard, Globe, List, BarChart3, Settings,
   Shield, LogOut, Menu, X, ChevronRight, HardDrive, Search,
-  Newspaper, Monitor, Database, TrendingUp, Play, Activity
+  Newspaper, Monitor, Database, TrendingUp, Activity
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { Skeleton } from '@/components/ui/skeleton';
