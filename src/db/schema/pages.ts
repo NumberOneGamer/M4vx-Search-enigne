@@ -14,6 +14,7 @@ export const pages = pgTable('pages', {
   httpStatus: integer('http_status'),
   contentType: varchar('content_type', { length: 100 }),
   crawlDepth: integer('crawl_depth').default(0),
+  language: varchar('language', { length: 10 }),
   crawledAt: timestamp('crawled_at'),
   lastIndexedAt: timestamp('last_indexed_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),

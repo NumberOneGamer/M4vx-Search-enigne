@@ -82,6 +82,7 @@ function SearchContent() {
   const [videoFilter, setVideoFilter] = useState<VideoFilter>({});
   const [imageFilter, setImageFilter] = useState<ImageFilter>({});
   const [showFilters, setShowFilters] = useState(false);
+  const [language, setLanguage] = useState('all');
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const prevQueryRef = useRef(query);
 
@@ -145,7 +146,7 @@ function SearchContent() {
     }
     prevQueryRef.current = query;
 
-    const fetchWeb = fetch(`/api/search?q=${encodeURIComponent(query)}&page=${page}&pageSize=${pageSize}`)
+    const fetchWeb = fetch(`/api/search?q=${encodeURIComponent(query)}&page=${page}&pageSize=${pageSize}${language !== 'all' ? `&language=${language}` : ''}`)
       .then((res) => res.ok ? res.json() : null)
       .then((data) => setWebResults(data));
 
@@ -273,8 +274,31 @@ function SearchContent() {
               <ThemeToggle />
             </div>
           </div>
-          <SearchTabs activeTab={activeTab} onTabChange={handleTabChange} />
-        </div>
+          <div className="flex items-center gap-2 border-b border-border/50">
+            <SearchTabs activeTab={activeTab} onTabChange={handleTabChange} />
+            <div className="flex items-center gap-1 ml-auto">
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                className="text-xs bg-transparent border border-border rounded px-2 py-1 text-muted-foreground hover:text-foreground cursor-pointer outline-none"
+              >
+                <option value="all">All langs</option>
+                <option value="en">English</option>
+                <option value="de">German</option>
+                <option value="fr">French</option>
+                <option value="es">Spanish</option>
+                <option value="it">Italian</option>
+                <option value="pt">Portuguese</option>
+                <option value="nl">Dutch</option>
+                <option value="ru">Russian</option>
+                <option value="ar">Arabic</option>
+                <option value="zh">Chinese</option>
+                <option value="ja">Japanese</option>
+                <option value="ko">Korean</option>
+              </select>
+            </div>
+          </div>
+          </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6" ref={imageContainerRef}>

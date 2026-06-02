@@ -1,6 +1,6 @@
 import { db } from '@/db';
 import { images } from '@/db/schema/images';
-import { eq, and, desc, gte, lte, count, sql, or, ilike } from 'drizzle-orm';
+import { eq, and, desc, gte, lte, count, sql, or, ilike, type SQL } from 'drizzle-orm';
 import { cacheGet, cacheSet, CACHE_TTL } from '@/lib/cache';
 
 export interface ImageSearchOptions {
@@ -47,6 +47,27 @@ const ORIENTATIONS: Record<string, { aspect: [number, number] }> = {
   square: { aspect: [0.8, 1.2] },
 };
 
+function parseImageQuery(query: string): { phrases: string[]; terms: string[] } {
+  const phrases: string[] = [];
+  const tokens: string[] = [];
+  let i = 0;
+  while (i < query.length) {
+    if (query[i] === '"') {
+      const end = query.indexOf('"', i + 1);
+      if (end !== -1) {
+        const p = query.slice(i + 1, end).trim();
+        if (p) phrases.push(p.toLowerCase());
+        i = end + 1;
+        continue;
+      }
+    }
+    tokens.push(query[i]);
+    i++;
+  }
+  const terms = tokens.join('').toLowerCase().split(/\s+/).filter(Boolean);
+  return { phrases, terms };
+}
+
 export async function searchImages(options: ImageSearchOptions): Promise<ImageSearchResult> {
   try {
   const { query, page = 1, pageSize = 20, size, orientation, color, imageType, sort = 'relevance' } = options;
@@ -54,13 +75,43 @@ export async function searchImages(options: ImageSearchOptions): Promise<ImageSe
   const cached = await cacheGet<ImageSearchResult>(cacheKey);
   if (cached) return cached;
 
+  const { phrases, terms } = parseImageQuery(query);
+  const softPhrase = query.replace(/"/g, '').trim().toLowerCase();
+  const hasPhrases = phrases.length > 0;
+  const hasTerms = terms.length > 0;
+
   const conditions: ReturnType<typeof eq>[] = [];
 
-  const queryTerms = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (queryTerms.length > 0) {
+  const phraseConditions: any[] = [];
+  for (const phrase of phrases) {
+    phraseConditions.push(
+      or(
+        ilike(images.altText, `%${phrase}%`),
+        ilike(images.caption, `%${phrase}%`),
+        ilike(images.pageTitle, `%${phrase}%`),
+        ilike(images.contextContent, `%${phrase}%`)
+      )
+    );
+  }
+
+  if (hasPhrases && hasTerms) {
+    conditions.push(or(
+      or(...phraseConditions),
+      or(
+        ...terms.map(term => or(
+          ilike(images.altText, `%${term}%`),
+          ilike(images.caption, `%${term}%`),
+          ilike(images.pageTitle, `%${term}%`),
+          ilike(images.contextContent, `%${term}%`)
+        ))
+      )
+    ) as any);
+  } else if (hasPhrases) {
+    conditions.push(or(...phraseConditions) as any);
+  } else if (hasTerms) {
     conditions.push(
       or(
-        ...queryTerms.map(term => or(
+        ...terms.map(term => or(
           ilike(images.altText, `%${term}%`),
           ilike(images.caption, `%${term}%`),
           ilike(images.pageTitle, `%${term}%`),
@@ -73,7 +124,6 @@ export async function searchImages(options: ImageSearchOptions): Promise<ImageSe
   if (size && SIZE_RANGES[size]) {
     const range = SIZE_RANGES[size];
     if (range.totalPixels !== undefined && range.totalPixels !== Infinity) {
-      const pixelThreshold = Math.sqrt(range.totalPixels) * 1000;
       conditions.push(
         sql`${images.width} * ${images.height} <= ${Math.floor(range.totalPixels)}` as any
       );
@@ -130,9 +180,33 @@ export async function searchImages(options: ImageSearchOptions): Promise<ImageSe
 
   const totalResults = totalResult?.count ?? 0;
 
-  const orderScores = queryTerms.map(term =>
-    sql`(CASE WHEN ${images.altText} ILIKE ${`%${term}%`} THEN 10 ELSE 0 END + CASE WHEN ${images.caption} ILIKE ${`%${term}%`} THEN 5 ELSE 0 END + CASE WHEN ${images.pageTitle} ILIKE ${`%${term}%`} THEN 3 ELSE 0 END)`
-  );
+  const orderScores: SQL[] = [];
+
+  for (const phrase of phrases) {
+    orderScores.push(
+      sql`(CASE WHEN ${images.altText} ILIKE ${`%${phrase}%`} THEN 10000 ELSE 0 END
+         + CASE WHEN ${images.caption} ILIKE ${`%${phrase}%`} THEN 8000 ELSE 0 END
+         + CASE WHEN ${images.pageTitle} ILIKE ${`%${phrase}%`} THEN 5000 ELSE 0 END)`
+    );
+  }
+
+  const softWords = softPhrase.split(/\s+/).filter(Boolean);
+  if (softWords.length > 1) {
+    orderScores.push(
+      sql`(CASE WHEN ${images.altText} ILIKE ${`%${softPhrase}%`} THEN 5000 ELSE 0 END
+         + CASE WHEN ${images.caption} ILIKE ${`%${softPhrase}%`} THEN 4000 ELSE 0 END
+         + CASE WHEN ${images.pageTitle} ILIKE ${`%${softPhrase}%`} THEN 2000 ELSE 0 END)`
+    );
+  }
+
+  for (const term of terms) {
+    orderScores.push(
+      sql`(CASE WHEN ${images.altText} ILIKE ${`%${term}%`} THEN 10 ELSE 0 END
+         + CASE WHEN ${images.caption} ILIKE ${`%${term}%`} THEN 5 ELSE 0 END
+         + CASE WHEN ${images.pageTitle} ILIKE ${`%${term}%`} THEN 3 ELSE 0 END)`
+    );
+  }
+
   const orderExpr = orderScores.length > 0
     ? sql`${sql.join(orderScores, sql` + `)} DESC, ${images.searchCount} DESC`
     : sql`${images.searchCount} DESC`;
@@ -159,16 +233,28 @@ export async function searchImages(options: ImageSearchOptions): Promise<ImageSe
 
   const results = rows.map((row) => {
     let score = 0;
-    if (queryTerms.length > 0) {
-      const alt = (row.altText ?? '').toLowerCase();
-      const caption = (row.caption ?? '').toLowerCase();
-      const pageTitle = (row.pageTitle ?? '').toLowerCase();
-      for (const term of queryTerms) {
-        if (alt.includes(term)) score += 10;
-        if (caption.includes(term)) score += 5;
-        if (pageTitle.includes(term)) score += 3;
-      }
+    const alt = (row.altText ?? '').toLowerCase();
+    const cap = (row.caption ?? '').toLowerCase();
+    const pt = (row.pageTitle ?? '').toLowerCase();
+
+    for (const phrase of phrases) {
+      if (alt.includes(phrase)) score += 10000;
+      if (cap.includes(phrase)) score += 8000;
+      if (pt.includes(phrase)) score += 5000;
     }
+
+    if (softWords.length > 1) {
+      if (alt.includes(softPhrase)) score += 5000;
+      if (cap.includes(softPhrase)) score += 4000;
+      if (pt.includes(softPhrase)) score += 2000;
+    }
+
+    for (const term of terms) {
+      if (alt.includes(term)) score += 10;
+      if (cap.includes(term)) score += 5;
+      if (pt.includes(term)) score += 3;
+    }
+
     return {
       id: row.id,
       url: row.url,

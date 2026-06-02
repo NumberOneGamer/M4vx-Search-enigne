@@ -119,13 +119,14 @@ export async function GET(request: Request) {
       endDate.setDate(endDate.getDate() + 1);
       conditions.push(lt(pages.crawledAt, endDate));
     }
+    if (language && language !== 'all') conditions.push(eq(pages.language, language));
 
     const scoreMap = new Map(rankedPages.map((rp) => [rp.pageId, rp.score]));
     const allKeywords = [...effectiveQ.split(/\s+/).filter(Boolean), ...effectiveExactPhrases];
     const [totalDocCount] = await db.select({ count: sql<number>`count(*)` }).from(pages).where(sql`${pages.lastIndexedAt} IS NOT NULL`);
     const totalDocs = Number(totalDocCount?.count || 1);
 
-    type PageRow = { id: number; title: string | null; url: string; description: string | null; content: string | null; domainId: number; crawledAt: Date | null; contentType: string | null; wordCount: number | null; };
+    type PageRow = { id: number; title: string | null; url: string; description: string | null; content: string | null; domainId: number; crawledAt: Date | null; contentType: string | null; wordCount: number | null; language: string | null; };
     let results: PageRow[] = [];
     let totalResults = 0;
 
@@ -134,7 +135,7 @@ export async function GET(request: Request) {
       const query = db.select({
         id: pages.id, title: pages.title, url: pages.url, description: pages.metaDescription,
         content: pages.content, domainId: pages.domainId, crawledAt: pages.crawledAt,
-        contentType: pages.contentType, wordCount: pages.wordCount,
+        contentType: pages.contentType, wordCount: pages.wordCount, language: pages.language,
       }).from(pages);
       if (conditions.length > 0) query.where(and(...conditions));
       if (sort === 'date') query.orderBy(desc(pages.crawledAt));
@@ -157,7 +158,7 @@ export async function GET(request: Request) {
       const query = db.select({
         id: pages.id, title: pages.title, url: pages.url, description: pages.metaDescription,
         content: pages.content, domainId: pages.domainId, crawledAt: pages.crawledAt,
-        contentType: pages.contentType, wordCount: pages.wordCount,
+        contentType: pages.contentType, wordCount: pages.wordCount, language: pages.language,
       }).from(pages);
       if (conditions.length > 0) query.where(and(...conditions));
       if (sort === 'date') query.orderBy(desc(pages.crawledAt));
@@ -243,7 +244,7 @@ export async function GET(request: Request) {
         score: combinedScore,
         contentType: r.contentType || undefined,
         wordCount: r.wordCount || undefined,
-        language: undefined,
+        language: r.language ?? undefined,
         favicon: domainMap.get(r.domainId)
           ? `https://www.google.com/s2/favicons?domain=${domainMap.get(r.domainId)}&sz=32`
           : undefined,
