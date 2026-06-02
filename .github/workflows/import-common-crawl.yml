@@ -27,9 +27,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
-      - run: npm install
+      - run: npm install @neondatabase/serverless
 
       - name: Import Common Crawl data
         run: node scripts/import-common-crawl.mjs
