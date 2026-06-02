@@ -1,4 +1,5 @@
 import { gunzipSync } from 'zlib';
+
 const CRAWL = process.env.CC_CRAWL || 'CC-MAIN-2026-21';
 const NUM_FILES = parseInt(process.env.CC_FILES || '10', 10);
 const MAX_PAGES = parseInt(process.env.CC_MAX_PAGES || '200000', 10);
@@ -69,40 +70,16 @@ async function downloadAndParse(path) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
   console.log(`    ${(buf.length/1024/1024).toFixed(1)} MB compressed`);
-    const dec = gunzipSync(buf);
+  const dec = gunzipSync(buf);
   console.log(`    ${(dec.length/1024/1024).toFixed(1)} MB decompressed`);
-  const recs = parseWet(dec);
-  console.log(`    ${recs.length} pages`);
-  return recs;
+  return parseWet(dec);
 }
 
-async function main() {
-  console.log(`Common Crawl Import (zero-dep)`);
-  console.log(`  Crawl: ${CRAWL}, Files: ${NUM_FILES}, Max: ${MAX_PAGES}\n`);
-
-  console.log('[1] Fetching WET index...');
-  const idxRes = await fetch(`https://data.commoncrawl.org/crawl-data/${CRAWL}/wet.paths.gz`);
-  if (!idxRes.ok) throw new Error(`Index HTTP ${idxRes.status}`);
-  const paths = gunzipSync(Buffer.from(await idxRes.arrayBuffer())).toString('utf-8').trim().split('\n').filter(Boolean).map(p => p.trim());
-  console.log(`  ${paths.length} WET files\n`);
-
-  const toDL = paths.slice(0, NUM_FILES);
-  console.log('[2] Downloading & parsing...');
-  let all = [];
-  for (let fi = 0; fi < toDL.length; fi++) {
-    console.log(`  [${fi+1}/${toDL.length}] ${toDL[fi].split('/').pop()}`);
-    try { const r = await downloadAndParse(toDL[fi]); all.push(...r); if (all.length >= MAX_PAGES) { all.length = MAX_PAGES; break; } }
-    catch (e) { console.log(`    ERROR: ${String(e).slice(0,150)}`); }
-  }
-
-  if (!all.length) { console.log('\nNo records.'); return; }
-
-  console.log(`\n[3] Inserting ${all.length} pages...`);
+async function insertRecords(records) {
   let inserted = 0, skipped = 0;
   const dc = {};
-
-  for (let i = 0; i < all.length; i += BATCH_SIZE) {
-    const batch = all.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const batch = records.slice(i, i + BATCH_SIZE);
     const vals = [];
     for (const r of batch) {
       if (!dc[r.hn]) dc[r.hn] = await getOrCreateDomain(r.hn);
@@ -115,12 +92,50 @@ async function main() {
       inserted += (r2.rows || []).length;
       skipped += batch.length - (r2.rows || []).length;
     } catch (e) { skipped += batch.length; }
-    process.stdout.write(`\r  ${Math.round((i+BATCH_SIZE)/all.length*100)}% (${inserted} in, ${skipped} skip)`);
+    process.stdout.write(`\r    ${Math.round((i+BATCH_SIZE)/records.length*100)}% (${inserted} in, ${skipped} skip)`);
+  }
+  console.log();
+  return { inserted, skipped };
+}
+
+async function main() {
+  console.log(`Common Crawl Import (streaming)`);
+  console.log(`  Crawl: ${CRAWL}, Files: ${NUM_FILES}, Max: ${MAX_PAGES}\n`);
+
+  console.log('[1] Fetching WET index...');
+  const idxRes = await fetch(`https://data.commoncrawl.org/crawl-data/${CRAWL}/wet.paths.gz`);
+  if (!idxRes.ok) throw new Error(`Index HTTP ${idxRes.status}`);
+  const paths = gunzipSync(Buffer.from(await idxRes.arrayBuffer())).toString('utf-8').trim().split('\n').filter(Boolean).map(p => p.trim());
+  console.log(`  ${paths.length} WET files\n`);
+
+  const toDL = paths.slice(0, NUM_FILES);
+  let totalInserted = 0, totalSkipped = 0, totalPages = 0;
+
+  for (let fi = 0; fi < toDL.length; fi++) {
+    if (totalInserted >= MAX_PAGES) break;
+    console.log(`[${fi+1}/${toDL.length}] ${toDL[fi].split('/').pop()}`);
+    try {
+      const records = await downloadAndParse(toDL[fi]);
+      if (!records.length) { console.log('    No records'); continue; }
+      totalPages += records.length;
+      console.log(`    ${records.length} pages`);
+      console.log(`    Inserting...`);
+      const { inserted, skipped } = await insertRecords(records);
+      totalInserted += inserted;
+      totalSkipped += skipped;
+      // Free memory before next file
+      records.length = 0;
+    } catch (e) { console.log(`    ERROR: ${String(e).slice(0,150)}`); }
+    console.log(`    Running total: ${totalInserted} inserted, ${totalSkipped} skipped\n`);
   }
 
-  const mb = (toDL.length * 70).toFixed(0);
-  console.log(`\n\nDone. ${inserted} pages imported. ~${mb} MB downloaded (cloud).`);
-  console.log('Run your indexer next: npm run extract:all');
+  const mb = (toDL.length * 65).toFixed(0);
+  console.log(`=== DONE ===`);
+  console.log(`  Processed: ${totalPages} pages from ${toDL.length} WET files`);
+  console.log(`  Inserted:  ${totalInserted}`);
+  console.log(`  Skipped:   ${totalSkipped}`);
+  console.log(`  Downloaded ~${mb} MB on cloud runner`);
+  console.log(`\n  Run your indexer next: npm run extract:all`);
 }
 
 main().catch(e => { console.error('\nFatal:', e.message); process.exit(1); });
