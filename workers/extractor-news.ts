@@ -58,10 +58,12 @@ async function processPage(page, env) {
 
 export default {
   async scheduled(event, env, ctx) {
-    const rows = await sql("SELECT id,url,title,meta_description,crawled_at FROM pages WHERE crawled_at IS NOT NULL ORDER BY crawled_at DESC LIMIT 15", [], env);
-    let done = 0;
-    for (const r of rows) { try { await processPage(r, env); done++; } catch {} }
-    console.log(`News extractor: ${done}/${rows.length}`);
+    try {
+      const rows = await sql("SELECT id,url,title,meta_description,crawled_at FROM pages WHERE crawled_at IS NOT NULL ORDER BY crawled_at DESC LIMIT 15", [], env);
+      let done = 0;
+      for (const r of rows) { try { await processPage(r, env); done++; } catch {} }
+      console.log(`News extractor: ${done}/${rows.length}`);
+    } catch(e) { console.error('News scheduled error:', String(e)); }
   },
   async fetch(request, env) {
     const url = new URL(request.url);
