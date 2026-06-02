@@ -67,21 +67,56 @@ async function processUrl(row, env) {
     await sql("UPDATE crawl_queue SET status='completed',completed_at=NOW() WHERE id=$1",[id], env);
     if (depth < 5) {
       const allLinks = [...parsed.internalLinks, ...parsed.externalLinks];
-      const exist = new Set((await sql("SELECT url FROM crawl_queue WHERE url=ANY($1)",[allLinks.slice(0,200)],env)).map(r=>r.url));
-      const existPg = new Set((await sql("SELECT url FROM pages WHERE url=ANY($1)",[allLinks.slice(0,200)],env)).map(r=>r.url));
-      for (const link of allLinks.slice(0,30)) {
-        if (!exist.has(link) && !existPg.has(link)) {
-          const ln = new URL(link).hostname; let [dom] = await sql("SELECT id FROM domains WHERE name=$1",[ln],env);
-          if (!dom) { const dr = await sql("INSERT INTO domains (name) VALUES($1) RETURNING id",[ln],env); dom = dr[0]; }
-          await sql("INSERT INTO crawl_queue (domain_id,url,priority,depth,status) VALUES($1,$2,$3,$4,'pending') ON CONFLICT (url) DO NOTHING",[dom.id,link,parsed.externalLinks.includes(link)?1:5,depth+1], env);
-        }
+      const candidates = allLinks.slice(0, 50);
+      const existing = new Set([
+        ...(await sql("SELECT url FROM crawl_queue WHERE url=ANY($1)",[candidates],env)).map(r=>r.url),
+        ...(await sql("SELECT url FROM pages WHERE url=ANY($1)",[candidates],env)).map(r=>r.url),
+      ]);
+      const hosts = [...new Set(candidates.map(l=>{try{return new URL(l).hostname}catch{return null}}).filter(Boolean))];
+      const domRows = await sql("SELECT id, name FROM domains WHERE name=ANY($1)",[hosts],env);
+      const domMap = new Map(domRows.map(d=>[d.name, d.id]));
+      const inserts = [];
+      for (const link of candidates) {
+        if (existing.has(link)) continue;
+        try {
+          const hostname = new URL(link).hostname;
+          let did = domMap.get(hostname);
+          if (!did) {
+            const ins = await sql("INSERT INTO domains (name) VALUES($1) ON CONFLICT (name) DO UPDATE SET name=EXCLUDED.name RETURNING id",[hostname],env);
+            did = ins[0].id; domMap.set(hostname, did);
+          }
+          inserts.push(`(${did},'${link.replace(/'/g,"''")}',${parsed.externalLinks.includes(link)?1:5},${depth+1},'pending')`);
+        } catch {}
+      }
+      for (let i=0; i<inserts.length; i+=25) {
+        const chunk = inserts.slice(i, i+25);
+        try { await sql(`INSERT INTO crawl_queue (domain_id,url,priority,depth,status) VALUES ${chunk.join(',')} ON CONFLICT (url) DO NOTHING`,[],env); } catch {}
       }
     }
   } catch(e) {
     try { const attempts=(row.attempts||0)+1; const max=parseInt(env.CRAWLER_MAX_ATTEMPTS||'3',10); if(attempts>=max) { await sql("UPDATE crawl_queue SET status='failed',error_message=$1,attempts=$2,completed_at=NOW() WHERE id=$3",[String(e),attempts,id], env); } else { await sql("UPDATE crawl_queue SET status='pending',error_message=$1,attempts=$2,scheduled_at=NOW()+($2||' minutes')::interval WHERE id=$3",[String(e),attempts,id], env); } } catch {}
   }
 }
+async function runBatch(env) {
+  try {
+    const maxB = parseInt(env.CRAWLER_BATCH_MAX||'3',10);
+    try { await sql("UPDATE crawl_queue SET status='pending',started_at=NULL WHERE status='running' AND started_at<NOW()-INTERVAL'1 minute'",[],env); } catch {}
+    const rows = await sql("SELECT * FROM crawl_queue WHERE status='pending' AND (scheduled_at IS NULL OR scheduled_at<NOW()) ORDER BY priority DESC,RANDOM() LIMIT $1",[maxB],env);
+    if (!rows.length) return {processed:0};
+    let processed=0, completed=0, failed=0;
+    for (const r of rows) {
+      try { await processUrl(r, env); processed++; completed++; }
+      catch(e) { processed++; failed++; }
+    }
+    const st = (await sql("SELECT (SELECT COUNT(*) FROM crawl_queue WHERE status='pending')q,(SELECT COUNT(*) FROM crawl_queue WHERE status='completed')c,(SELECT COUNT(*) FROM crawl_queue WHERE status='failed')f",[],env))[0];
+    return {processed,completed,failed,stats:{queue_size:Number(st.q),completed:Number(st.c),failed:Number(st.f)}};
+  } catch(e) { return {error:String(e)}; }
+}
+
 export default {
+  async scheduled(event, env, ctx) {
+    await runBatch(env);
+  },
   async fetch(request, env) {
     try {
       const url = new URL(request.url);
@@ -117,21 +152,8 @@ export default {
       }
       if (url.pathname==='/errors') { const r=await sql("SELECT DISTINCT error_message,COUNT(*) c FROM crawl_queue WHERE status='failed' GROUP BY error_message",[],env); return new Response(JSON.stringify({errors:r}),{headers:{'Content-Type':'application/json'}}); }
       if (url.pathname==='/reset-blocked') { const b=Number((await sql("SELECT COUNT(*) c FROM crawl_queue WHERE status='failed' AND error_message ILIKE '%blocked%'",[],env))[0]?.c||0); await sql("UPDATE crawl_queue SET status='pending',attempts=0,error_message=NULL,scheduled_at=NULL,completed_at=NULL,started_at=NULL WHERE status='failed' AND error_message ILIKE '%blocked%'",[],env); return new Response(JSON.stringify({reset:b}),{headers:{'Content-Type':'application/json'}}); }
-      try {
-        const bs = parseInt(url.searchParams.get('batch')||'20',10);
-        const maxB = parseInt(env.CRAWLER_BATCH_MAX||'50',10);
-        const actual = Math.min(bs, maxB);
-        try { await sql("UPDATE crawl_queue SET status='pending',started_at=NULL WHERE status='running' AND started_at<NOW()-INTERVAL'1 minute'",[],env); } catch {}
-        const rows = await sql("SELECT * FROM crawl_queue WHERE status='pending' AND (scheduled_at IS NULL OR scheduled_at<NOW()) ORDER BY priority DESC,RANDOM() LIMIT $1",[actual],env);
-        if (!rows.length) return new Response(JSON.stringify({processed:0}),{headers:{'Content-Type':'application/json'}});
-        let processed=0, completed=0, failed=0;
-        for (const r of rows) {
-          try { await processUrl(r, env); processed++; completed++; }
-          catch(e) { processed++; failed++; }
-        }
-        const st = (await sql("SELECT (SELECT COUNT(*) FROM crawl_queue WHERE status='pending')q,(SELECT COUNT(*) FROM crawl_queue WHERE status='completed')c,(SELECT COUNT(*) FROM crawl_queue WHERE status='failed')f",[],env))[0];
-        return new Response(JSON.stringify({processed,completed,failed,stats:{queue_size:Number(st.q),completed:Number(st.c),failed:Number(st.f)}}),{headers:{'Content-Type':'application/json'}});
-      } catch(e) { return new Response(JSON.stringify({error:String(e)}),{status:500,headers:{'Content-Type':'application/json'}}); }
+      const result = await runBatch(env);
+      return new Response(JSON.stringify(result),{headers:{'Content-Type':'application/json'},status:result.error?500:200});
     } catch(e) {
       return new Response(JSON.stringify({fatal:String(e),stack:e.stack}),{status:500,headers:{'Content-Type':'application/json'}});
     }
