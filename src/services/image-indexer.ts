@@ -48,6 +48,7 @@ const ORIENTATIONS: Record<string, { aspect: [number, number] }> = {
 };
 
 export async function searchImages(options: ImageSearchOptions): Promise<ImageSearchResult> {
+  try {
   const { query, page = 1, pageSize = 20, size, orientation, color, imageType, sort = 'relevance' } = options;
   const cacheKey = `image:search:${query}:${page}:${pageSize}:${size}:${orientation}:${color}:${imageType}:${sort}`;
   const cached = await cacheGet<ImageSearchResult>(cacheKey);
@@ -156,6 +157,10 @@ export async function searchImages(options: ImageSearchOptions): Promise<ImageSe
   const result: ImageSearchResult = { results, totalResults, page, pageSize };
   await cacheSet(cacheKey, result, CACHE_TTL.SEARCH_RESULTS);
   return result;
+  } catch (error) {
+    console.error('Image search error:', error);
+    return { results: [], totalResults: 0, page: options.page || 1, pageSize: options.pageSize || 20 };
+  }
 }
 
 export async function getRelatedImages(imageId: number, limit = 8) {

@@ -111,11 +111,12 @@ function SearchContent() {
       if (data.results) {
         if (append) {
           setAllImageResults((prev) => [...prev, ...data.results]);
+          setImageResults((prev) => ({ results: [...(prev?.results || []), ...data.results], totalResults: data.totalResults }));
         } else {
           setAllImageResults(data.results);
+          setImageResults({ results: data.results, totalResults: data.totalResults });
         }
         setHasMoreImages(data.results.length === 20);
-        setImageResults({ results: append ? [...(imageResults?.results || []), ...data.results] : data.results, totalResults: data.totalResults });
       }
     } catch { }
     setImageLoading(false);

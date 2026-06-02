@@ -37,6 +37,7 @@ export interface NewsSearchResult {
 }
 
 export async function searchNews(options: NewsSearchOptions): Promise<NewsSearchResult> {
+  try {
   const { query, page = 1, pageSize = 10, timeFrame, category, publisher, sort = 'relevance' } = options;
   const cacheKey = `news:search:${query}:${page}:${pageSize}:${timeFrame}:${category}:${publisher}:${sort}`;
   const cached = await cacheGet<NewsSearchResult>(cacheKey);
@@ -138,6 +139,10 @@ export async function searchNews(options: NewsSearchOptions): Promise<NewsSearch
   const result: NewsSearchResult = { results, totalResults, page, pageSize };
   await cacheSet(cacheKey, result, CACHE_TTL.SEARCH_RESULTS);
   return result;
+  } catch (error) {
+    console.error('News search error:', error);
+    return { results: [], totalResults: 0, page: options.page || 1, pageSize: options.pageSize || 10 };
+  }
 }
 
 export async function getTrendingNews(limit = 5) {

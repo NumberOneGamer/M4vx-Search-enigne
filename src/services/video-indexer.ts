@@ -44,6 +44,7 @@ const DURATION_RANGES: Record<string, [number, number]> = {
 };
 
 export async function searchVideos(options: VideoSearchOptions): Promise<VideoSearchResult> {
+  try {
   const { query, page = 1, pageSize = 10, duration, uploadDate, quality, source, sort = 'relevance' } = options;
   const cacheKey = `video:search:${query}:${page}:${pageSize}:${duration}:${uploadDate}:${quality}:${source}:${sort}`;
   const cached = await cacheGet<VideoSearchResult>(cacheKey);
@@ -140,6 +141,10 @@ export async function searchVideos(options: VideoSearchOptions): Promise<VideoSe
   const result: VideoSearchResult = { results, totalResults, page, pageSize };
   await cacheSet(cacheKey, result, CACHE_TTL.SEARCH_RESULTS);
   return result;
+  } catch (error) {
+    console.error('Video search error:', error);
+    return { results: [], totalResults: 0, page: options.page || 1, pageSize: options.pageSize || 10 };
+  }
 }
 
 export async function getRelatedVideos(videoId: number, limit = 6) {

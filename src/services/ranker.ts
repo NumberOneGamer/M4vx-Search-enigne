@@ -12,6 +12,7 @@ export async function searchRankedPages(
   factors: RankingFactors = DEFAULT_RANKING_FACTORS,
   limit = 50
 ): Promise<Array<{ pageId: number; score: number }>> {
+  try {
   const queryTokens = tokenizeAndStem(query);
   if (queryTokens.length === 0) return [];
 
@@ -46,6 +47,10 @@ export async function searchRankedPages(
     .slice(0, limit);
 
   return sorted.map(([pageId, score]) => ({ pageId, score }));
+  } catch (error) {
+    console.error('Ranked search error:', error);
+    return [];
+  }
 }
 
 export async function recalculateRankingsForPage(pageId: number): Promise<void> {
